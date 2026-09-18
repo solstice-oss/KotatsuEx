@@ -4,8 +4,8 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.MenuItem
 import android.view.View
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,12 +17,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -47,10 +48,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowInsetsCompat
+import coil3.ImageLoader
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
 import dagger.hilt.android.AndroidEntryPoint
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.model.getTitle
@@ -58,14 +65,18 @@ import org.koitharu.kotatsu.core.model.parcelable.ParcelableManga
 import org.koitharu.kotatsu.core.nav.AppRouter
 import org.koitharu.kotatsu.core.nav.router
 import org.koitharu.kotatsu.core.ui.BaseActivity
+import org.koitharu.kotatsu.core.util.ext.mangaExtra
 import org.koitharu.kotatsu.databinding.ActivityMassMigrateKexBinding
-import org.koitharu.kotatsu.parsers.model.Manga
 import org.koitharu.kotatsu.settings.compose.DropSauceTheme
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MassMigrateActivityKEx : BaseActivity<ActivityMassMigrateKexBinding>() {
 
 	private val viewModel by viewModels<MassMigrateViewModelKEx>()
+
+	@Inject
+	lateinit var imageLoader: ImageLoader
 
 	private val searchLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
 		if (result.resultCode == RESULT_OK) {
@@ -209,7 +220,7 @@ class MassMigrateActivityKEx : BaseActivity<ActivityMassMigrateKexBinding>() {
 					.padding(16.dp),
 				enabled = state.selectedMangaIds.isNotEmpty()
 			) {
-				Text(text = "Continue")
+				Text(stringResource(R.string.action_continue))
 			}
 		}
 	}
@@ -255,6 +266,8 @@ class MassMigrateActivityKEx : BaseActivity<ActivityMassMigrateKexBinding>() {
 			return
 		}
 
+		val context = LocalContext.current
+
 		Column(modifier = Modifier.fillMaxSize()) {
 			LazyColumn(
 				modifier = Modifier
@@ -270,33 +283,67 @@ class MassMigrateActivityKEx : BaseActivity<ActivityMassMigrateKexBinding>() {
 							.padding(12.dp),
 						verticalAlignment = Alignment.CenterVertically
 					) {
-						// Left: Original
-						Text(
-							text = item.original.title,
-							style = MaterialTheme.typography.bodyMedium,
-							maxLines = 2,
-							overflow = TextOverflow.Ellipsis,
+						// Left: Original Cover & Title
+						Row(
 							modifier = Modifier
 								.weight(1f)
-								.clickable { router.openDetails(item.original) }
-								.padding(4.dp)
-						)
-
-						Spacer(modifier = Modifier.width(8.dp))
-
-						// Right: Best Alternative
-						val alt = item.alternative
-						if (alt != null) {
+								.clickable { router.openDetails(item.original) },
+							verticalAlignment = Alignment.CenterVertically,
+							horizontalArrangement = Arrangement.spacedBy(8.dp)
+						) {
+							AsyncImage(
+								model = ImageRequest.Builder(context)
+									.data(item.original.coverUrl)
+									.mangaExtra(item.original)
+									.build(),
+								imageLoader = imageLoader,
+								contentDescription = null,
+								contentScale = ContentScale.Crop,
+								modifier = Modifier
+									.size(48.dp, 64.dp)
+									.clip(RoundedCornerShape(4.dp))
+							)
 							Text(
-								text = alt.title,
+								text = item.original.title,
 								style = MaterialTheme.typography.bodyMedium,
 								maxLines = 2,
 								overflow = TextOverflow.Ellipsis,
+								modifier = Modifier.weight(1f)
+							)
+						}
+
+						Spacer(modifier = Modifier.width(8.dp))
+
+						// Right: Best Alternative Cover & Title
+						val alt = item.alternative
+						if (alt != null) {
+							Row(
 								modifier = Modifier
 									.weight(1f)
-									.clickable { router.openDetails(alt) }
-									.padding(4.dp)
-							)
+									.clickable { router.openDetails(alt) },
+								verticalAlignment = Alignment.CenterVertically,
+								horizontalArrangement = Arrangement.spacedBy(8.dp)
+							) {
+								AsyncImage(
+									model = ImageRequest.Builder(context)
+										.data(alt.coverUrl)
+										.mangaExtra(alt)
+										.build(),
+									imageLoader = imageLoader,
+									contentDescription = null,
+									contentScale = ContentScale.Crop,
+									modifier = Modifier
+										.size(48.dp, 64.dp)
+										.clip(RoundedCornerShape(4.dp))
+								)
+								Text(
+									text = alt.title,
+									style = MaterialTheme.typography.bodyMedium,
+									maxLines = 2,
+									overflow = TextOverflow.Ellipsis,
+									modifier = Modifier.weight(1f)
+								)
+							}
 						} else {
 							Text(
 								text = stringResource(R.string.label_no_match),
@@ -324,12 +371,14 @@ class MassMigrateActivityKEx : BaseActivity<ActivityMassMigrateKexBinding>() {
 										searchLauncher.launch(intent)
 									}
 								)
+								DropdownMenuItem(
+									text = { Text(stringResource(R.string.label_cancel_mass_migration)) },
+									onClick = {
+										menuExpanded = false
+										viewModel.removeItemFromComparison(item.original.id)
+									}
+								)
 							}
-						}
-
-						// Cross button to cancel/remove this entry
-						IconButton(onClick = { viewModel.removeItemFromComparison(item.original.id) }) {
-							Icon(Icons.Filled.Close, contentDescription = "Cancel")
 						}
 					}
 					HorizontalDivider()
@@ -420,7 +469,7 @@ class MassMigrateActivityKEx : BaseActivity<ActivityMassMigrateKexBinding>() {
 				onClick = { finish() },
 				modifier = Modifier.fillMaxWidth()
 			) {
-				Text(text = "Finish")
+				Text(stringResource(R.string.action_finish))
 			}
 		}
 	}

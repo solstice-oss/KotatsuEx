@@ -12,6 +12,7 @@ class MassMigrateMenuProviderKEx(private val context: Context) : MenuProvider {
 
 	override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
 		val item = menu.add(Menu.NONE, MENU_ID, Menu.NONE, R.string.mass_migration)
+		item.setIcon(R.drawable.ic_progress_migrate)
 		item.setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
 	}
 

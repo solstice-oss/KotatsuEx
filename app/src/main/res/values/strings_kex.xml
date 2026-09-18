@@ -15,4 +15,6 @@
 	<string name="label_cancel_mass_migration">Cancel</string>
 	<string name="label_finalise_mass_migration">Finalise</string>
 	<string name="label_alternatives_search">Search alternatives</string>
+	<string name="action_continue">Continue</string>
+	<string name="action_finish">Finish</string>
 </resources>
