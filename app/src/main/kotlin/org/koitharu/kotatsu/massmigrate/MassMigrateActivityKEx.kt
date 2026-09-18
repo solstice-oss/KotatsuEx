@@ -113,7 +113,7 @@ class MassMigrateActivityKEx : BaseActivity<ActivityMassMigrateKexBinding>() {
 					MassMigrateStep.SELECT_MANGA -> SelectMangaStep(state)
 					MassMigrateStep.SELECT_TARGETS -> SelectTargetsStep(state)
 					MassMigrateStep.MIGRATING -> MigratingStep(state)
-					MassMigrateStep.COMPLETED -> CompletedStep()
+					MassMigrateStep.COMPLETED -> CompletedStep(state)
 				}
 			}
 		}
@@ -232,14 +232,50 @@ class MassMigrateActivityKEx : BaseActivity<ActivityMassMigrateKexBinding>() {
 	}
 
 	@Composable
-	private fun CompletedStep() {
-		Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-			Column(horizontalAlignment = Alignment.CenterHorizontally) {
-				Text(text = stringResource(R.string.migration_completed_successfully), style = MaterialTheme.typography.titleMedium)
-				Spacer(modifier = Modifier.height(24.dp))
-				Button(onClick = { finish() }) {
-					Text(text = "Finish")
+	private fun CompletedStep(state: MassMigrateState) {
+		Column(
+			modifier = Modifier
+				.fillMaxSize()
+				.padding(16.dp),
+			horizontalAlignment = Alignment.CenterHorizontally
+		) {
+			Text(text = stringResource(R.string.migration_completed_successfully), style = MaterialTheme.typography.titleLarge)
+			Spacer(modifier = Modifier.height(12.dp))
+			Text(
+				text = stringResource(R.string.migration_results_summary, state.successCount, state.failedCount),
+				style = MaterialTheme.typography.bodyLarge
+			)
+			Spacer(modifier = Modifier.height(16.dp))
+			if (state.failedMangas.isNotEmpty()) {
+				Text(
+					text = stringResource(R.string.migration_failed_list_header),
+					style = MaterialTheme.typography.titleMedium,
+					modifier = Modifier.align(Alignment.Start)
+				)
+				Spacer(modifier = Modifier.height(8.dp))
+				LazyColumn(
+					modifier = Modifier
+						.weight(1f)
+						.fillMaxWidth()
+				) {
+					items(state.failedMangas) { manga ->
+						Text(
+							text = manga.title,
+							style = MaterialTheme.typography.bodyMedium,
+							modifier = Modifier.padding(vertical = 4.dp)
+						)
+						HorizontalDivider()
+					}
 				}
+			} else {
+				Spacer(modifier = Modifier.weight(1f))
+			}
+			Spacer(modifier = Modifier.height(16.dp))
+			Button(
+				onClick = { finish() },
+				modifier = Modifier.fillMaxWidth()
+			) {
+				Text(text = "Finish")
 			}
 		}
 	}

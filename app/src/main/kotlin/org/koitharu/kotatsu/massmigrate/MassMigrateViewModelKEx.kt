@@ -113,16 +113,46 @@ class MassMigrateViewModelKEx @Inject constructor(
 		if (mangas.isEmpty() || targetSources.isEmpty()) return
 
 		viewModelScope.launch {
-			_state.update { it.copy(step = MassMigrateStep.MIGRATING, totalToMigrate = mangas.size, migratedCount = 0) }
+			_state.update { 
+				it.copy(
+					step = MassMigrateStep.MIGRATING, 
+					totalToMigrate = mangas.size, 
+					migratedCount = 0,
+					successCount = 0,
+					failedCount = 0,
+					failedMangas = emptyList()
+				) 
+			}
 			
+			var successes = 0
+			var failures = 0
+			val failuresList = mutableListOf<Manga>()
+
 			for (manga in mangas) {
 				val bestAlternative = findBestAlternative(manga, targetSources)
-				if (bestAlternative != null) {
+				val success = if (bestAlternative != null) {
 					runCatchingCancellable {
 						massMigrateUseCase(manga, bestAlternative)
-					}
+						true
+					}.getOrDefault(false)
+				} else {
+					false
 				}
-				_state.update { it.copy(migratedCount = it.migratedCount + 1) }
+
+				if (success) {
+					successes++
+				} else {
+					failures++
+					failuresList.add(manga)
+				}
+				_state.update { 
+					it.copy(
+						migratedCount = it.migratedCount + 1,
+						successCount = successes,
+						failedCount = failures,
+						failedMangas = failuresList.toList()
+					) 
+				}
 			}
 			_state.update { it.copy(step = MassMigrateStep.COMPLETED) }
 		}
@@ -178,7 +208,10 @@ data class MassMigrateState(
 	val availableTargetSources: List<MangaSource> = emptyList(),
 	val selectedTargetSourceKeys: Set<String> = emptySet(),
 	val totalToMigrate: Int = 0,
-	val migratedCount: Int = 0
+	val migratedCount: Int = 0,
+	val successCount: Int = 0,
+	val failedCount: Int = 0,
+	val failedMangas: List<Manga> = emptyList()
 )
 
 enum class MassMigrateStep {

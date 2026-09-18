@@ -8,4 +8,6 @@
 	<string name="migration_progress">Migrating %1$d/%2$d</string>
 	<string name="migration_completed_successfully">Mass migration completed successfully</string>
 	<string name="no_manga_found_for_source">No library manga found for this source</string>
+	<string name="migration_results_summary">Successfully migrated: %1$d, Skipped: %2$d</string>
+	<string name="migration_failed_list_header">Skipped entries:</string>
 </resources>
