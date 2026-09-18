@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.koitharu.kotatsu.alternatives.domain.MigrateUseCase
 import org.koitharu.kotatsu.core.db.MangaDatabase
 import org.koitharu.kotatsu.core.db.entity.toMangaList
 import org.koitharu.kotatsu.core.model.chaptersCount
@@ -29,7 +28,7 @@ class MassMigrateViewModelKEx @Inject constructor(
 	private val sourcesRepository: MangaSourcesRepository,
 	private val searchHelperFactory: SearchV2Helper.Factory,
 	private val mangaRepositoryFactory: MangaRepository.Factory,
-	private val migrateUseCase: MigrateUseCase,
+	private val massMigrateUseCase: MassMigrateUseCaseKEx,
 ) : BaseViewModel() {
 
 	private val _state = MutableStateFlow(MassMigrateState())
@@ -120,7 +119,7 @@ class MassMigrateViewModelKEx @Inject constructor(
 				val bestAlternative = findBestAlternative(manga, targetSources)
 				if (bestAlternative != null) {
 					runCatchingCancellable {
-						migrateUseCase(manga, bestAlternative)
+						massMigrateUseCase(manga, bestAlternative)
 					}
 				}
 				_state.update { it.copy(migratedCount = it.migratedCount + 1) }
