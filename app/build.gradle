@@ -267,4 +267,7 @@ dependencies {
 
 	androidTestImplementation libs.hilt.android.testing
 	kspAndroidTest libs.hilt.android.compiler
+
+	// KEx -->
+	implementation(libs.androidx.compose.materialIcons)
 }

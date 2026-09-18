@@ -6,6 +6,7 @@ import android.view.View
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,26 +19,40 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowInsetsCompat
 import dagger.hilt.android.AndroidEntryPoint
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.model.getTitle
+import org.koitharu.kotatsu.core.nav.router
 import org.koitharu.kotatsu.core.ui.BaseActivity
 import org.koitharu.kotatsu.databinding.ActivityMassMigrateKexBinding
 import org.koitharu.kotatsu.settings.compose.DropSauceTheme
@@ -94,6 +109,7 @@ class MassMigrateActivityKEx : BaseActivity<ActivityMassMigrateKexBinding>() {
 								MassMigrateStep.SELECT_SOURCE -> stringResource(R.string.select_source)
 								MassMigrateStep.SELECT_MANGA -> stringResource(R.string.select_manga)
 								MassMigrateStep.SELECT_TARGETS -> stringResource(R.string.select_target_sources)
+								MassMigrateStep.COMPARISON -> stringResource(R.string.mass_migration)
 								MassMigrateStep.MIGRATING -> stringResource(R.string.mass_migration)
 								MassMigrateStep.COMPLETED -> stringResource(R.string.mass_migration)
 							}
@@ -112,6 +128,7 @@ class MassMigrateActivityKEx : BaseActivity<ActivityMassMigrateKexBinding>() {
 					MassMigrateStep.SELECT_SOURCE -> SelectSourceStep(state)
 					MassMigrateStep.SELECT_MANGA -> SelectMangaStep(state)
 					MassMigrateStep.SELECT_TARGETS -> SelectTargetsStep(state)
+					MassMigrateStep.COMPARISON -> ComparisonStep(state)
 					MassMigrateStep.MIGRATING -> MigratingStep(state)
 					MassMigrateStep.COMPLETED -> CompletedStep(state)
 				}
@@ -203,13 +220,123 @@ class MassMigrateActivityKEx : BaseActivity<ActivityMassMigrateKexBinding>() {
 				}
 			}
 			Button(
-				onClick = { viewModel.startMigration() },
+				onClick = { viewModel.prepareComparison() },
 				modifier = Modifier
 					.fillMaxWidth()
 					.padding(16.dp),
 				enabled = state.selectedTargetSourceKeys.isNotEmpty()
 			) {
 				Text(text = stringResource(R.string.start_migration))
+			}
+		}
+	}
+
+	@Composable
+	private fun ComparisonStep(state: MassMigrateState) {
+		if (state.isLoading) {
+			Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+				CircularProgressIndicator()
+			}
+			return
+		}
+
+		Column(modifier = Modifier.fillMaxSize()) {
+			LazyColumn(
+				modifier = Modifier
+					.weight(1f)
+					.fillMaxWidth()
+			) {
+				items(state.comparisonItems) { item ->
+					var menuExpanded by remember { mutableStateOf(false) }
+
+					Row(
+						modifier = Modifier
+							.fillMaxWidth()
+							.padding(12.dp),
+						verticalAlignment = Alignment.CenterVertically
+					) {
+						// Left: Original
+						Text(
+							text = item.original.title,
+							style = MaterialTheme.typography.bodyMedium,
+							maxLines = 2,
+							overflow = TextOverflow.Ellipsis,
+							modifier = Modifier
+								.weight(1f)
+								.clickable { router.openDetails(item.original) }
+								.padding(4.dp)
+						)
+
+						Spacer(modifier = Modifier.width(8.dp))
+
+						// Right: Best Alternative
+						val alt = item.alternative
+						if (alt != null) {
+							Text(
+								text = alt.title,
+								style = MaterialTheme.typography.bodyMedium,
+								maxLines = 2,
+								overflow = TextOverflow.Ellipsis,
+								modifier = Modifier
+									.weight(1f)
+									.clickable { router.openDetails(alt) }
+									.padding(4.dp)
+							)
+						} else {
+							Text(
+								text = stringResource(R.string.label_no_match),
+								style = MaterialTheme.typography.bodyMedium,
+								color = MaterialTheme.colorScheme.error,
+								modifier = Modifier.weight(1f)
+							)
+						}
+
+						Box {
+							IconButton(onClick = { menuExpanded = true }) {
+								Icon(Icons.Filled.MoreVert, contentDescription = null)
+							}
+							DropdownMenu(
+								expanded = menuExpanded,
+								onDismissRequest = { menuExpanded = false }
+							) {
+								DropdownMenuItem(
+									text = { Text(stringResource(R.string.label_search_manually)) },
+									onClick = {
+										menuExpanded = false
+										router.openSearch(item.original.source, item.original.title)
+									}
+								)
+							}
+						}
+
+						// Cross button to cancel/remove this entry
+						IconButton(onClick = { viewModel.removeItemFromComparison(item.original.id) }) {
+							Icon(Icons.Filled.Close, contentDescription = "Cancel")
+						}
+					}
+					HorizontalDivider()
+				}
+			}
+
+			Row(
+				modifier = Modifier
+					.fillMaxWidth()
+					.padding(16.dp),
+				horizontalArrangement = Arrangement.spacedBy(16.dp)
+			) {
+				OutlinedButton(
+					onClick = { finish() },
+					modifier = Modifier.weight(1f)
+				) {
+					Text(stringResource(R.string.label_cancel_mass_migration))
+				}
+				Button(
+					onClick = { viewModel.executeFinalMigration() },
+					modifier = Modifier.weight(1f),
+					enabled = state.comparisonItems.isNotEmpty()
+				) {
+					Text(stringResource(R.string.label_finalise_mass_migration))
+				}
 			}
 		}
 	}
@@ -262,7 +389,7 @@ class MassMigrateActivityKEx : BaseActivity<ActivityMassMigrateKexBinding>() {
 						Text(
 							text = manga.title,
 							style = MaterialTheme.typography.bodyMedium,
-							modifier = Modifier.padding(vertical = 4.dp)
+							modifier = Modifier.padding(vertical =.4.dp)
 						)
 						HorizontalDivider()
 					}

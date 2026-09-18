@@ -136,6 +136,8 @@ androidx-compose-material3 = { module = "androidx.compose.material3:material3", 
 androidx-compose-runtime = { module = "androidx.compose.runtime:runtime" }
 androidx-compose-activity = { module = "androidx.activity:activity-compose", version.ref = "activity" }
 androidx-graphics-shapes = { module = "androidx.graphics:graphics-shapes", version.ref = "graphicsShapes" }
+# KEx -->
+androidx-compose-materialIcons = { module = "androidx.compose.material:material-icons-extended" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "gradle" }

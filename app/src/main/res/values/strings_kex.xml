@@ -10,4 +10,8 @@
 	<string name="no_manga_found_for_source">No library manga found for this source</string>
 	<string name="migration_results_summary">Successfully migrated: %1$d, Skipped: %2$d</string>
 	<string name="migration_failed_list_header">Skipped entries:</string>
+	<string name="label_search_manually">Search manually</string>
+	<string name="label_no_match">No match</string>
+	<string name="label_cancel_mass_migration">Cancel</string>
+	<string name="label_finalise_mass_migration">Finalise</string>
 </resources>
