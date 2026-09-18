@@ -2,16 +2,27 @@ package org.koitharu.kotatsu.massmigrate
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.Menu
+import android.view.MenuInflater
+import android.view.MenuItem
 import android.view.View
+import android.view.ViewGroup
+import android.widget.EditText
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.core.view.MenuProvider
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updateLayoutParams
+import androidx.core.view.updatePadding
 import dagger.hilt.android.AndroidEntryPoint
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.exceptions.resolve.SnackbarErrorObserver
 import org.koitharu.kotatsu.core.model.parcelable.ParcelableManga
+import org.koitharu.kotatsu.core.nav.AppRouter
 import org.koitharu.kotatsu.core.nav.router
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.ui.BaseActivity
+import org.koitharu.kotatsu.core.ui.dialog.buildAlertDialog
 import org.koitharu.kotatsu.core.ui.list.OnListItemClickListener
 import org.koitharu.kotatsu.core.ui.widgets.TipView
 import org.koitharu.kotatsu.core.util.ext.consumeAllSystemBarsInsets
@@ -45,6 +56,13 @@ class AlternativesSearchActivityKEx :
 
 	private val viewModel by viewModels<SearchViewModel>()
 
+	private val subSearchLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+		if (result.resultCode == RESULT_OK) {
+			setResult(RESULT_OK, result.data)
+			finish()
+		}
+	}
+
 	override fun onCreate(savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
 		setContentView(ActivitySearchBinding.inflate(layoutInflater))
@@ -72,12 +90,59 @@ class AlternativesSearchActivityKEx :
 		setDisplayHomeAsUp(isEnabled = true, showUpAsClose = false)
 		supportActionBar?.setSubtitle(R.string.search_results)
 
+		addMenuProvider(object : MenuProvider {
+			override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
+				menu.add(Menu.NONE, 1001, Menu.NONE, R.string.search).apply {
+					setIcon(R.drawable.ic_search)
+					setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+				}
+			}
+
+			override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
+				if (menuItem.itemId == 1001) {
+					showEditQueryDialog()
+					return true
+				}
+				return false
+			}
+		})
+
 		viewModel.list.observe(this, adapter)
 		viewModel.onError.observeEvent(this, SnackbarErrorObserver(viewBinding.recyclerView, null))
 	}
 
+	private fun showEditQueryDialog() {
+		val context = this
+		val editText = EditText(context).apply {
+			setText(viewModel.query)
+			setSelection(text.length)
+		}
+		buildAlertDialog(context) {
+			setTitle(R.string.search)
+			setView(editText)
+			setNegativeButton(android.R.string.cancel, null)
+			setPositiveButton(android.R.string.ok) { _, _ ->
+				val newQuery = editText.text.toString()
+				if (newQuery.isNotBlank() && newQuery != viewModel.query) {
+					val intent = Intent(context, AlternativesSearchActivityKEx::class.java)
+						.putExtra(AppRouter.KEY_QUERY, newQuery)
+						.putExtra(KEY_ORIGINAL_ID, intent.getLongExtra(KEY_ORIGINAL_ID, 0L))
+					subSearchLauncher.launch(intent)
+				}
+			}
+		}.show()
+	}
+
 	override fun onApplyWindowInsets(v: View, insets: WindowInsetsCompat): WindowInsetsCompat {
 		val barsInsets = insets.systemBarsInsets
+		viewBinding.appbar.updatePadding(
+			top = barsInsets.top,
+			left = barsInsets.left,
+			right = barsInsets.right,
+		)
+		viewBinding.statusBarScrim.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+			height = barsInsets.top
+		}
 		viewBinding.recyclerView.setPadding(
 			left = barsInsets.left,
 			top = 0,
