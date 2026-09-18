@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+	<string name="mass_migration">Mass Migration</string>
+	<string name="select_source">Select Source</string>
+	<string name="select_manga">Select Manga</string>
+	<string name="select_target_sources">Select Target Sources</string>
+	<string name="start_migration">Start Migration</string>
+	<string name="migration_progress">Migrating %1$d/%2$d</string>
+	<string name="migration_completed_successfully">Mass migration completed successfully</string>
+	<string name="no_manga_found_for_source">No library manga found for this source</string>
+</resources>

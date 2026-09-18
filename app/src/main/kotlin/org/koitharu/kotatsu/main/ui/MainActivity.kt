@@ -93,6 +93,7 @@ import org.koitharu.kotatsu.main.ui.owners.AppBarOwner
 import org.koitharu.kotatsu.main.ui.owners.BottomNavOwner
 import org.koitharu.kotatsu.main.ui.owners.ListCheckpointOwner
 import org.koitharu.kotatsu.main.ui.welcome.OnboardingActivity
+import org.koitharu.kotatsu.massmigrate.MassMigrateMenuProviderKEx
 import org.koitharu.kotatsu.parsers.model.Manga
 import org.koitharu.kotatsu.remotelist.ui.MangaSearchMenuProvider
 import org.koitharu.kotatsu.search.ui.suggestion.SearchSuggestionItemCallback
@@ -195,6 +196,9 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), AppBarOwner, BottomNav
 		}
 
 		addMainOverflowMenuProvider(MainMenuProvider(viewModel))
+		// KEx -->
+		addMainOverflowMenuProvider(MassMigrateMenuProviderKEx(this))
+		// KEx <--
 
 		val exitCallback = ExitCallback(this, viewBinding.container)
 		onBackPressedDispatcher.addCallback(exitCallback)

@@ -1,0 +1,246 @@
+package org.koitharu.kotatsu.massmigrate
+
+import android.os.Bundle
+import android.view.MenuItem
+import android.view.View
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.viewModels
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowInsetsCompat
+import dagger.hilt.android.AndroidEntryPoint
+import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.core.model.getTitle
+import org.koitharu.kotatsu.core.ui.BaseActivity
+import org.koitharu.kotatsu.databinding.ActivityMassMigrateKexBinding
+import org.koitharu.kotatsu.settings.compose.DropSauceTheme
+
+@AndroidEntryPoint
+class MassMigrateActivityKEx : BaseActivity<ActivityMassMigrateKexBinding>() {
+
+	private val viewModel by viewModels<MassMigrateViewModelKEx>()
+
+	override fun onCreate(savedInstanceState: Bundle?) {
+		super.onCreate(savedInstanceState)
+		setContentView(ActivityMassMigrateKexBinding.inflate(layoutInflater))
+		setDisplayHomeAsUp(isEnabled = true, showUpAsClose = false)
+
+		viewBinding.composeView.setContent {
+			DropSauceTheme {
+				val state by viewModel.state.collectAsState()
+				MassMigrateScreen(state)
+			}
+		}
+
+		onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+			override fun handleOnBackPressed() {
+				if (!viewModel.navigateBack()) {
+					finish()
+				}
+			}
+		})
+	}
+
+	override fun onApplyWindowInsets(v: View, insets: WindowInsetsCompat): WindowInsetsCompat {
+		return insets
+	}
+
+	override fun onOptionsItemSelected(item: MenuItem): Boolean {
+		if (item.itemId == android.R.id.home) {
+			if (!viewModel.navigateBack()) {
+				finish()
+			}
+			return true
+		}
+		return super.onOptionsItemSelected(item)
+	}
+
+	@OptIn(ExperimentalMaterial3Api::class)
+	@Composable
+	private fun MassMigrateScreen(state: MassMigrateState) {
+		Scaffold(
+			topBar = {
+				TopAppBar(
+					title = {
+						Text(
+							text = when (state.step) {
+								MassMigrateStep.SELECT_SOURCE -> stringResource(R.string.select_source)
+								MassMigrateStep.SELECT_MANGA -> stringResource(R.string.select_manga)
+								MassMigrateStep.SELECT_TARGETS -> stringResource(R.string.select_target_sources)
+								MassMigrateStep.MIGRATING -> stringResource(R.string.mass_migration)
+								MassMigrateStep.COMPLETED -> stringResource(R.string.mass_migration)
+							}
+						)
+					}
+				)
+			},
+			modifier = Modifier.systemBarsPadding()
+		) { paddingValues ->
+			Box(
+				modifier = Modifier
+					.fillMaxSize()
+					.padding(paddingValues)
+			) {
+				when (state.step) {
+					MassMigrateStep.SELECT_SOURCE -> SelectSourceStep(state)
+					MassMigrateStep.SELECT_MANGA -> SelectMangaStep(state)
+					MassMigrateStep.SELECT_TARGETS -> SelectTargetsStep(state)
+					MassMigrateStep.MIGRATING -> MigratingStep(state)
+					MassMigrateStep.COMPLETED -> CompletedStep()
+				}
+			}
+		}
+	}
+
+	@Composable
+	private fun SelectSourceStep(state: MassMigrateState) {
+		if (state.sources.isEmpty()) {
+			Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+				Text(text = stringResource(R.string.no_sources_to_migrate), style = MaterialTheme.typography.bodyLarge)
+			}
+		} else {
+			LazyColumn(modifier = Modifier.fillMaxSize()) {
+				items(state.sources) { source ->
+					Row(
+						modifier = Modifier
+							.fillMaxWidth()
+							.clickable { viewModel.onSourceSelected(source.key) }
+							.padding(16.dp),
+						verticalAlignment = Alignment.CenterVertically
+					) {
+						Column(modifier = Modifier.weight(1f)) {
+							Text(text = source.title, style = MaterialTheme.typography.titleMedium)
+							Text(
+								text = "${source.mangaCount} manga entries",
+								style = MaterialTheme.typography.bodySmall,
+								color = MaterialTheme.colorScheme.onSurfaceVariant
+							)
+						}
+					}
+					HorizontalDivider()
+				}
+			}
+		}
+	}
+
+	@Composable
+	private fun SelectMangaStep(state: MassMigrateState) {
+		Column(modifier = Modifier.fillMaxSize()) {
+			LazyColumn(modifier = Modifier.weight(1f)) {
+				items(state.mangaList) { manga ->
+					val isChecked = manga.id in state.selectedMangaIds
+					Row(
+						modifier = Modifier
+							.fillMaxWidth()
+							.clickable { viewModel.toggleMangaSelection(manga.id) }
+							.padding(16.dp),
+						verticalAlignment = Alignment.CenterVertically
+					) {
+						Checkbox(checked = isChecked, onCheckedChange = { viewModel.toggleMangaSelection(manga.id) })
+						Spacer(modifier = Modifier.width(12.dp))
+						Text(text = manga.title, style = MaterialTheme.typography.bodyLarge)
+					}
+					HorizontalDivider()
+				}
+			}
+			Button(
+				onClick = { viewModel.onMangaSelectionConfirmed() },
+				modifier = Modifier
+					.fillMaxWidth()
+					.padding(16.dp),
+				enabled = state.selectedMangaIds.isNotEmpty()
+			) {
+				Text(text = "Continue")
+			}
+		}
+	}
+
+	@Composable
+	private fun SelectTargetsStep(state: MassMigrateState) {
+		Column(modifier = Modifier.fillMaxSize()) {
+			LazyColumn(modifier = Modifier.weight(1f)) {
+				items(state.availableTargetSources) { source ->
+					val isChecked = source.name in state.selectedTargetSourceKeys
+					Row(
+						modifier = Modifier
+							.fillMaxWidth()
+							.clickable { viewModel.toggleTargetSource(source) }
+							.padding(16.dp),
+						verticalAlignment = Alignment.CenterVertically
+					) {
+						Checkbox(checked = isChecked, onCheckedChange = { viewModel.toggleTargetSource(source) })
+						Spacer(modifier = Modifier.width(12.dp))
+						Text(text = source.getTitle(this@MassMigrateActivityKEx), style = MaterialTheme.typography.bodyLarge)
+					}
+					HorizontalDivider()
+				}
+			}
+			Button(
+				onClick = { viewModel.startMigration() },
+				modifier = Modifier
+					.fillMaxWidth()
+					.padding(16.dp),
+				enabled = state.selectedTargetSourceKeys.isNotEmpty()
+			) {
+				Text(text = stringResource(R.string.start_migration))
+			}
+		}
+	}
+
+	@Composable
+	private fun MigratingStep(state: MassMigrateState) {
+		Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+			Column(horizontalAlignment = Alignment.CenterHorizontally) {
+				Text(
+					text = stringResource(R.string.migration_progress, state.migratedCount, state.totalToMigrate),
+					style = MaterialTheme.typography.titleMedium
+				)
+				Spacer(modifier = Modifier.height(16.dp))
+				LinearProgressIndicator(
+					progress = { if (state.totalToMigrate > 0) state.migratedCount.toFloat() / state.totalToMigrate else 0f },
+					modifier = Modifier.fillMaxWidth(0.8f)
+				)
+			}
+		}
+	}
+
+	@Composable
+	private fun CompletedStep() {
+		Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+			Column(horizontalAlignment = Alignment.CenterHorizontally) {
+				Text(text = stringResource(R.string.migration_completed_successfully), style = MaterialTheme.typography.titleMedium)
+				Spacer(modifier = Modifier.height(24.dp))
+				Button(onClick = { finish() }) {
+					Text(text = "Finish")
+				}
+			}
+		}
+	}
+}

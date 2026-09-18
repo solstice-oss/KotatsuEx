@@ -140,6 +140,11 @@
 		<activity
 			android:name="org.koitharu.kotatsu.settings.storage.directories.MangaDirectoriesActivity"
 			android:label="@string/local_manga_directories" />
+		<!-- KEx -> !-->
+		<activity
+			android:name="org.koitharu.kotatsu.massmigrate.MassMigrateActivityKEx"
+			android:label="@string/mass_migration" />
+		<!-- KEx <- !-->
 		<activity
 			android:name="org.koitharu.kotatsu.browser.BrowserActivity"
 			android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
