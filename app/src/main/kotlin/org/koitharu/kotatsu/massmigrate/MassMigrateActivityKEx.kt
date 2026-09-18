@@ -1,8 +1,10 @@
 package org.koitharu.kotatsu.massmigrate
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.MenuItem
 import android.view.View
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
 import androidx.compose.foundation.clickable
@@ -52,15 +54,28 @@ import androidx.core.view.WindowInsetsCompat
 import dagger.hilt.android.AndroidEntryPoint
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.model.getTitle
+import org.koitharu.kotatsu.core.model.parcelable.ParcelableManga
+import org.koitharu.kotatsu.core.nav.AppRouter
 import org.koitharu.kotatsu.core.nav.router
 import org.koitharu.kotatsu.core.ui.BaseActivity
 import org.koitharu.kotatsu.databinding.ActivityMassMigrateKexBinding
+import org.koitharu.kotatsu.parsers.model.Manga
 import org.koitharu.kotatsu.settings.compose.DropSauceTheme
 
 @AndroidEntryPoint
 class MassMigrateActivityKEx : BaseActivity<ActivityMassMigrateKexBinding>() {
 
 	private val viewModel by viewModels<MassMigrateViewModelKEx>()
+
+	private val searchLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+		if (result.resultCode == RESULT_OK) {
+			val data = result.data ?: return@registerForActivityResult
+			val originalId = data.getLongExtra(KEY_ORIGINAL_ID, 0L)
+			val parcelableManga = data.getParcelableExtra<ParcelableManga>("selected_manga")
+			val selectedManga = parcelableManga?.manga ?: return@registerForActivityResult
+			viewModel.updateAlternative(originalId, selectedManga)
+		}
+	}
 
 	override fun onCreate(savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
@@ -303,7 +318,10 @@ class MassMigrateActivityKEx : BaseActivity<ActivityMassMigrateKexBinding>() {
 									text = { Text(stringResource(R.string.label_search_manually)) },
 									onClick = {
 										menuExpanded = false
-										router.openSearch(item.original.source, item.original.title)
+										val intent = Intent(this@MassMigrateActivityKEx, AlternativesSearchActivityKEx::class.java)
+											.putExtra(AppRouter.KEY_QUERY, item.original.title)
+											.putExtra(KEY_ORIGINAL_ID, item.original.id)
+										searchLauncher.launch(intent)
 									}
 								)
 							}
@@ -328,14 +346,14 @@ class MassMigrateActivityKEx : BaseActivity<ActivityMassMigrateKexBinding>() {
 					onClick = { finish() },
 					modifier = Modifier.weight(1f)
 				) {
-					Text(stringResource(R.string.label_cancel_mass_migration))
+					Text(text = stringResource(R.string.label_cancel_mass_migration))
 				}
 				Button(
 					onClick = { viewModel.executeFinalMigration() },
 					modifier = Modifier.weight(1f),
 					enabled = state.comparisonItems.isNotEmpty()
 				) {
-					Text(stringResource(R.string.label_finalise_mass_migration))
+					Text(text = stringResource(R.string.label_finalise_mass_migration))
 				}
 			}
 		}
@@ -389,7 +407,7 @@ class MassMigrateActivityKEx : BaseActivity<ActivityMassMigrateKexBinding>() {
 						Text(
 							text = manga.title,
 							style = MaterialTheme.typography.bodyMedium,
-							modifier = Modifier.padding(vertical =.4.dp)
+							modifier = Modifier.padding(vertical = 4.dp)
 						)
 						HorizontalDivider()
 					}
