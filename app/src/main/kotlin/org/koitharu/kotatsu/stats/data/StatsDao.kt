@@ -98,4 +98,27 @@ abstract class StatsDao {
 			list.forEach { emit(it) }
 		}
 	}
+
+	// KEx -->
+	suspend fun getSessionsBetween(fromDate: Long, toDate: Long, favouriteCategories: Set<Long>): List<StatsEntity> {
+		val where = whereClauseBetween(fromDate, toDate, favouriteCategories)
+		return getSessionsImpl(
+			SimpleSQLiteQuery(
+				"SELECT stats.* FROM stats JOIN manga ON manga.manga_id = stats.manga_id WHERE $where ORDER BY started_at",
+			),
+		)
+	}
+
+	private fun whereClauseBetween(fromDate: Long, toDate: Long, favouriteCategories: Set<Long>): String {
+		val conditions = ArrayList<String>(4)
+		conditions.add("(SELECT deleted_at FROM history WHERE history.manga_id = stats.manga_id) = 0")
+		conditions.add("stats.started_at >= $fromDate")
+		conditions.add("stats.started_at <= $toDate")
+		if (favouriteCategories.isNotEmpty()) {
+			val ids = favouriteCategories.joinToString(",")
+			conditions.add("stats.manga_id IN (SELECT manga_id FROM favourites WHERE category_id IN ($ids))")
+		}
+		return conditions.joinToString(separator = " AND ")
+	}
+	// KEx <--
 }

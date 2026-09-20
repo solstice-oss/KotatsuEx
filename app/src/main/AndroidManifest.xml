@@ -150,6 +150,9 @@
 		<activity
 			android:name="org.koitharu.kotatsu.massmigrate.AlternativesActivityKEx"
 			android:label="@string/alternatives" />
+		<activity
+			android:name="org.koitharu.kotatsu.stats.ui.details.StatsDetailsActivityKEx"
+			android:label="@string/statistics_details" />
 		<!-- KEx <- !-->
 		<activity
 			android:name="org.koitharu.kotatsu.browser.BrowserActivity"

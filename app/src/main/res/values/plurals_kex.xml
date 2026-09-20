@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="_series_types">
+        <item quantity="one">%1$d series type</item>
+        <item quantity="other">%1$d series types</item>
+    </plurals>
+    <plurals name="_sources">
+        <item quantity="one">%1$d source</item>
+        <item quantity="other">%1$d sources</item>
+    </plurals>
+    <plurals name="_statuses">
+        <item quantity="one">%1$d status</item>
+        <item quantity="other">%1$d statuses</item>
+    </plurals>
+    <plurals name="_languages">
+        <item quantity="one">%1$d language</item>
+        <item quantity="other">%1$d languages</item>
+    </plurals>
+    <plurals name="category_plural">
+        <item quantity="one">%1$d category</item>
+        <item quantity="other">%1$d categories</item>
+    </plurals>
+    <plurals name="chapters_plural">
+        <item quantity="one">%1$d chapter</item>
+        <item quantity="other">%1$d chapters</item>
+    </plurals>
+</resources>

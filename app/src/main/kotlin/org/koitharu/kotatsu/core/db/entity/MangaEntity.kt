@@ -25,4 +25,7 @@ data class MangaEntity(
 	@ColumnInfo(name = "source_title") val sourceTitle: String?,
 	// epoch millis of the last successful details fetch from the source, 0 = never/unknown
 	@ColumnInfo(name = "details_updated_at", defaultValue = "0") val detailsUpdatedAt: Long = 0,
+	// KEx -->
+	@ColumnInfo(name = "series_type", defaultValue = "0") val seriesType: Int = 0,
+	// KEx <--
 )

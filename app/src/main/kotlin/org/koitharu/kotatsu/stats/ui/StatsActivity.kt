@@ -1,5 +1,6 @@
 package org.koitharu.kotatsu.stats.ui
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
@@ -24,6 +25,7 @@ import org.koitharu.kotatsu.core.util.ext.observeEvent
 import org.koitharu.kotatsu.core.util.ext.start
 import org.koitharu.kotatsu.databinding.ActivityStatsBinding
 import org.koitharu.kotatsu.settings.compose.DropSauceTheme
+import org.koitharu.kotatsu.stats.ui.details.StatsDetailsActivityKEx
 import javax.inject.Inject
 
 /**
@@ -86,6 +88,13 @@ class StatsActivity : BaseActivity<ActivityStatsBinding>() {
 			showClearConfirmDialog()
 			true
 		}
+
+		// KEx -->
+		R.id.action_detailed_stats -> {
+			startActivity(Intent(this, StatsDetailsActivityKEx::class.java))
+			true
+		}
+		// KEx <--
 
 		else -> super.onOptionsItemSelected(item)
 	}

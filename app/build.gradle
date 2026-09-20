@@ -270,4 +270,7 @@ dependencies {
 
 	// KEx -->
 	implementation(libs.androidx.compose.materialIcons)
+
+	// Android Chart
+	implementation(libs.mpandroidchart)
 }

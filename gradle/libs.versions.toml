@@ -57,6 +57,9 @@ composeBom = "2026.09.00"
 material3 = "1.5.0-alpha28"
 graphicsShapes = "1.0.1"
 
+# KEX -->
+mpandroidchart = "v3.1.0"
+
 [libraries]
 acra-dialog = { module = "ch.acra:acra-dialog", version.ref = "acra" }
 adapterdelegates = { module = "com.hannesdorfmann:adapterdelegates4-kotlin-dsl", version.ref = "adapterdelegates" }
@@ -138,6 +141,7 @@ androidx-compose-activity = { module = "androidx.activity:activity-compose", ver
 androidx-graphics-shapes = { module = "androidx.graphics:graphics-shapes", version.ref = "graphicsShapes" }
 # KEx -->
 androidx-compose-materialIcons = { module = "androidx.compose.material:material-icons-extended" }
+mpandroidchart = { module = "com.github.PhilJay:MPAndroidChart", version.ref = "mpandroidchart" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "gradle" }

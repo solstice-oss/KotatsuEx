@@ -209,4 +209,10 @@ abstract class MangaDao {
 			}
 		}
 	}
+
+	// KEx -->
+	@Transaction
+	@Query("SELECT * FROM manga WHERE manga_id IN (:ids)")
+	abstract suspend fun findLibraryMangaByIds(ids: Collection<Long>): List<MangaWithTags>
+	// KEx <--
 }

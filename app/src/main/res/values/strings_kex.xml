@@ -17,4 +17,35 @@
 	<string name="label_alternatives_search">Search alternatives</string>
 	<string name="action_continue">Continue</string>
 	<string name="action_finish">Finish</string>
+
+	<!-- Detailed Statistics -->
+	<string name="statistics_details">Detailed statistics</string>
+	<string name="series_type">Series type</string>
+	<string name="read_duration">Read duration</string>
+	<string name="score">Score</string>
+	<string name="length">Length</string>
+	<string name="source">Source</string>
+	<string name="tracker">Tracker</string>
+	<string name="category">Category</string>
+	<string name="tag">Tag</string>
+	<string name="start_year">Start year</string>
+
+	<string name="most_entries">Most entries</string>
+	<string name="chapters_read">Chapters read</string>
+	<string name="mean_tracking_score">Mean tracking score</string>
+
+	<string name="manga">Manga</string>
+	<string name="manhwa">Manhwa</string>
+	<string name="manhua">Manhua</string>
+	<string name="comic">Comic</string>
+
+	<string name="licensed">Licensed</string>
+	<string name="publishing_finished">Publishing finished</string>
+	<string name="cancelled">Cancelled</string>
+	<string name="on_hiatus">On hiatus</string>
+
+	<string name="not_rated">Not rated</string>
+	<string name="not_tracked">Not tracked</string>
+	<string name="not_started">Not started</string>
+	<string name="no_data_for_filters">No data found for your current filters</string>
 </resources>

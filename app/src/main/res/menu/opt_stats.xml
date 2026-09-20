@@ -10,4 +10,12 @@
 		android:titleCondensed="@string/clear"
 		app:showAsAction="never" />
 
+	<!-- KEx -> !-->
+	<item
+		android:id="@+id/action_detailed_stats"
+		android:icon="@drawable/ic_sparkles"
+		android:title="@string/statistics_details"
+		app:showAsAction="never" />
+	<!-- KEx <- !-->
+
 </menu>
