@@ -27,7 +27,7 @@ class AlternativesUseCase @Inject constructor(
 	private val mangaRepositoryFactory: MangaRepository.Factory,
 ) {
 
-	suspend operator fun invoke(manga: Manga): Flow<Manga> {
+	suspend operator fun invoke(manga: Manga, query: String? = null): Flow<Manga> { // <-- KEx
 		// Same kind only. A manga migrated onto a novel source (or the reverse) lands in the wrong
 		// reader with content it cannot load, so those are never offered as alternatives.
 		val isNovel = manga.source.isNovelSource
@@ -36,13 +36,14 @@ class AlternativesUseCase @Inject constructor(
 			return emptyFlow()
 		}
 		val semaphore = Semaphore(MAX_PARALLELISM)
+		val searchQuery = query ?: manga.title // <-- KEx
 		return channelFlow {
 			for (source in sources) {
 				launch {
 					val searchHelper = searchHelperFactory.create(source)
 					val list = runCatchingCancellable {
 						semaphore.withPermit {
-							searchHelper(manga.title, SearchKind.TITLE)?.manga
+							searchHelper(searchQuery, SearchKind.SIMPLE)?.manga // <-- KEx
 						}
 					}.getOrNull()
 					// A source may return several same-name results; load details for all of them

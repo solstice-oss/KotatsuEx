@@ -23,7 +23,6 @@ import androidx.lifecycle.LifecycleOwner
 import dagger.hilt.android.EntryPointAccessors
 import org.koitharu.kotatsu.BuildConfig
 import org.koitharu.kotatsu.R
-import org.koitharu.kotatsu.alternatives.ui.AlternativesActivity
 import org.koitharu.kotatsu.bookmarks.ui.AllBookmarksActivity
 import org.koitharu.kotatsu.browser.BrowserActivity
 import org.koitharu.kotatsu.browser.cloudflare.CloudFlareActivity
@@ -79,6 +78,7 @@ import org.koitharu.kotatsu.list.ui.sort.ListSortSheet
 import org.koitharu.kotatsu.local.ui.ImportDialogFragment
 import org.koitharu.kotatsu.local.ui.info.LocalInfoDialog
 import org.koitharu.kotatsu.main.ui.MainActivity
+import org.koitharu.kotatsu.massmigrate.AlternativesActivityKEx
 import org.koitharu.kotatsu.parsers.model.Manga
 import org.koitharu.kotatsu.parsers.model.MangaListFilter
 import org.koitharu.kotatsu.parsers.model.MangaPage
@@ -199,7 +199,7 @@ class AppRouter private constructor(
 
     fun openAlternatives(manga: Manga) {
         startActivity(
-            Intent(contextOrNull() ?: return, AlternativesActivity::class.java)
+            Intent(contextOrNull() ?: return, AlternativesActivityKEx::class.java) // <-- KEx
                 .putExtra(KEY_MANGA, ParcelableManga(manga)),
         )
     }

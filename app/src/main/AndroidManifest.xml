@@ -147,6 +147,9 @@
 		<activity
 			android:name="org.koitharu.kotatsu.massmigrate.AlternativesSearchActivityKEx"
 			android:label="@string/label_alternatives_search" />
+		<activity
+			android:name="org.koitharu.kotatsu.massmigrate.AlternativesActivityKEx"
+			android:label="@string/alternatives" />
 		<!-- KEx <- !-->
 		<activity
 			android:name="org.koitharu.kotatsu.browser.BrowserActivity"
