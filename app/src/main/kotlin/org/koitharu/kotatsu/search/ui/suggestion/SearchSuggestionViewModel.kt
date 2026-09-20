@@ -17,7 +17,6 @@ import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.prefs.SearchSuggestionType
 import org.koitharu.kotatsu.core.prefs.observeAsFlow
 import org.koitharu.kotatsu.core.prefs.observeAsStateFlow
-import org.koitharu.kotatsu.core.model.isNovelSource
 import org.koitharu.kotatsu.core.ui.BaseViewModel
 import org.koitharu.kotatsu.core.ui.widgets.ChipsView
 import org.koitharu.kotatsu.core.util.ext.printStackTraceDebug
@@ -35,7 +34,6 @@ private const val MAX_AUTHORS_ITEMS = 2
 private const val MAX_TAGS_ITEMS = 8
 private const val MAX_SOURCES_ITEMS = 6
 private const val MAX_SOURCES_TIPS_ITEMS = 2
-private const val SEARCH_SCOPE_CANDIDATE_MULTIPLIER = 4
 
 @HiltViewModel
 class SearchSuggestionViewModel @Inject constructor(
@@ -52,18 +50,14 @@ class SearchSuggestionViewModel @Inject constructor(
 		valueProducer = { isIncognitoModeEnabled },
 	)
 
-	val isNovelSearchScope: Boolean
-		get() = settings.isGlobalSearchNovelScope
-
 	val suggestion: Flow<List<SearchSuggestionItem>> = combine(
 		query.debounce(DEBOUNCE_TIMEOUT),
 		settings.observeAsFlow(AppSettings.KEY_SEARCH_SUGGESTION_TYPES) { searchSuggestionTypes },
 		settings.observeAsFlow(AppSettings.KEY_QUICK_FILTER) { isQuickFilterEnabled },
 		invalidationTrigger,
-		settings.observeAsFlow(AppSettings.KEY_GLOBAL_SEARCH_NOVEL_SCOPE) { isGlobalSearchNovelScope },
 	)
-	{ searchQuery, types, isQuickFilterEnabled, _, isNovelScope ->
-		SearchSuggestionRequest(searchQuery, types, isQuickFilterEnabled, isNovelScope)
+	{ searchQuery, types, isQuickFilterEnabled, _ ->
+		SearchSuggestionRequest(searchQuery, types, isQuickFilterEnabled)
 	}.mapLatest { request ->
 		buildSearchSuggestion(request)
 	}.distinctUntilChanged()
@@ -95,13 +89,10 @@ class SearchSuggestionViewModel @Inject constructor(
 		}
 	}
 
-	fun toggleSearchScope() {
-		settings.isGlobalSearchNovelScope = !settings.isGlobalSearchNovelScope
-	}
-
 	private suspend fun buildSearchSuggestion(
 		request: SearchSuggestionRequest,
 	): List<SearchSuggestionItem> = coroutineScope {
+		// Suggestions are deliberately unscoped: manga/novel is picked on the results screen.
 		listOfNotNull(
 			// The genre chip row under the search bar acts as a quick filter, so it follows the
 			// "Show quick filters" appearance setting in addition to the genre suggestion type.
@@ -111,7 +102,7 @@ class SearchSuggestionViewModel @Inject constructor(
 				null
 			},
 			if (SearchSuggestionType.MANGA in request.types) {
-				async { getManga(request.query, request.isNovelScope) }
+				async { getManga(request.query) }
 			} else {
 				null
 			},
@@ -126,12 +117,12 @@ class SearchSuggestionViewModel @Inject constructor(
 				null
 			},
 			if (SearchSuggestionType.SOURCES in request.types) {
-				async { getSources(request.query, request.isNovelScope) }
+				async { getSources(request.query) }
 			} else {
 				null
 			},
 			if (SearchSuggestionType.RECENT_SOURCES in request.types) {
-				async { getRecentSources(request.query, request.isNovelScope) }
+				async { getRecentSources(request.query) }
 			} else {
 				null
 			},
@@ -181,17 +172,8 @@ class SearchSuggestionViewModel @Inject constructor(
 		listOf(SearchSuggestionItem.Text(0, e))
 	}
 
-	private suspend fun getManga(
-		searchQuery: String,
-		isNovelScope: Boolean,
-	): List<SearchSuggestionItem> = runCatchingCancellable {
-		val manga = repository.getMangaSuggestion(
-			searchQuery,
-			MAX_MANGA_ITEMS * SEARCH_SCOPE_CANDIDATE_MULTIPLIER,
-			null,
-		)
-			.filter { it.source.isNovelSource == isNovelScope }
-			.take(MAX_MANGA_ITEMS)
+	private suspend fun getManga(searchQuery: String): List<SearchSuggestionItem> = runCatchingCancellable {
+		val manga = repository.getMangaSuggestion(searchQuery, MAX_MANGA_ITEMS, null)
 		if (manga.isEmpty()) {
 			emptyList()
 		} else {
@@ -202,33 +184,27 @@ class SearchSuggestionViewModel @Inject constructor(
 		listOf(SearchSuggestionItem.Text(0, e))
 	}
 
-	private fun getSources(searchQuery: String, isNovelScope: Boolean): List<SearchSuggestionItem> =
+	private fun getSources(searchQuery: String): List<SearchSuggestionItem> =
 		runCatchingCancellable {
-			repository.getSourcesSuggestion(searchQuery, Int.MAX_VALUE)
-				.filter { it.isNovelSource == isNovelScope }
-				.take(MAX_SOURCES_ITEMS)
+			repository.getSourcesSuggestion(searchQuery, MAX_SOURCES_ITEMS)
 				.map { SearchSuggestionItem.Source(it) }
 		}.getOrElse { e ->
 			e.printStackTraceDebug()
 			listOf(SearchSuggestionItem.Text(0, e))
 		}
 
-	private suspend fun getRecentSources(
-		searchQuery: String,
-		isNovelScope: Boolean,
-	): List<SearchSuggestionItem> = if (searchQuery.isEmpty()) {
-		runCatchingCancellable {
-			repository.getSourcesSuggestion(Int.MAX_VALUE)
-				.filter { it.isNovelSource == isNovelScope }
-				.take(MAX_SOURCES_TIPS_ITEMS)
-				.map { SearchSuggestionItem.SourceTip(it) }
-		}.getOrElse { e ->
-			e.printStackTraceDebug()
-			listOf(SearchSuggestionItem.Text(0, e))
+	private suspend fun getRecentSources(searchQuery: String): List<SearchSuggestionItem> =
+		if (searchQuery.isEmpty()) {
+			runCatchingCancellable {
+				repository.getSourcesSuggestion(MAX_SOURCES_TIPS_ITEMS)
+					.map { SearchSuggestionItem.SourceTip(it) }
+			}.getOrElse { e ->
+				e.printStackTraceDebug()
+				listOf(SearchSuggestionItem.Text(0, e))
+			}
+		} else {
+			emptyList()
 		}
-	} else {
-		emptyList()
-	}
 
 	private fun mapTags(tags: List<MangaTag>): List<ChipsView.ChipModel> = tags.map { tag ->
 		ChipsView.ChipModel(
@@ -241,6 +217,5 @@ class SearchSuggestionViewModel @Inject constructor(
 		val query: String,
 		val types: Set<SearchSuggestionType>,
 		val isQuickFilterEnabled: Boolean,
-		val isNovelScope: Boolean,
 	)
 }

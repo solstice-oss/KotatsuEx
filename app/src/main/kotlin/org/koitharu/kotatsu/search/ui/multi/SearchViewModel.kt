@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
@@ -59,13 +58,24 @@ class SearchViewModel @Inject constructor(
 
 	val query = savedStateHandle.get<String>(AppRouter.KEY_QUERY).orEmpty()
 	val kind = savedStateHandle.get<SearchKind>(AppRouter.KEY_KIND) ?: SearchKind.SIMPLE
-	private val isNovelScope = settings.isGlobalSearchNovelScope
+	/** Manga vs novel sources. Picked from the chip row on this screen and remembered for next time. */
+	val novelScope = MutableStateFlow(settings.isGlobalSearchNovelScope)
+	private val isNovelScope: Boolean
+		get() = novelScope.value
 
 	private val pinnedOnly = MutableStateFlow(settings.isSearchPinnedOnly)
 	private val localOnly = MutableStateFlow(settings.isSearchLocalOnly)
 	private val results = MutableStateFlow<List<SearchResultsListModel>>(emptyList())
 
+	// Not `isLoading`: that StateFlow can flip true->false before this flow is even subscribed (a search
+	// with no sources finishes in microseconds), and the collector would then wait forever for a `true`
+	// that already happened, leaving the screen on its spinner.
+	private val isSearching = MutableStateFlow(true)
+
 	private var searchJob: Job? = null
+
+	/** Bumped per search so a cancelled run's cleanup cannot clear the flag of the run replacing it. */
+	private var searchGeneration = 0
 
 	/** Whether any search filter is on, for the toolbar badge. */
 	val hasActiveFilters: StateFlow<Boolean> = combine(pinnedOnly, localOnly) { pinned, local ->
@@ -74,7 +84,7 @@ class SearchViewModel @Inject constructor(
 
 	val list: StateFlow<List<ListModel>> = combine(
 		results,
-		isLoading.dropWhile { !it },
+		isSearching,
 	) { list, loading ->
 		// Sources with no results are always hidden.
 		val filteredList = list.filter { it.list.isNotEmpty() }
@@ -133,6 +143,14 @@ class SearchViewModel @Inject constructor(
 		}
 	}
 
+	fun setNovelScope(value: Boolean) {
+		if (novelScope.value != value) {
+			settings.isGlobalSearchNovelScope = value
+			novelScope.value = value
+			retry()
+		}
+	}
+
 	fun setLocalOnly(value: Boolean) {
 		if (localOnly.value != value) {
 			settings.isSearchLocalOnly = value
@@ -143,27 +161,35 @@ class SearchViewModel @Inject constructor(
 
 	private fun doSearch() {
 		val prevJob = searchJob
+		val generation = ++searchGeneration
+		isSearching.value = true
 		searchJob = launchLoadingJob(Dispatchers.Default) {
 			prevJob?.cancelAndJoin()
-			appendResult(searchFavorites())
-			appendResult(searchHistory())
-			appendResult(searchLocal())
-			if (localOnly.value) {
-				return@launchLoadingJob
-			}
-			val sources = if (pinnedOnly.value) {
-				sourcesRepository.getPinnedSources().toList()
-			} else {
-				sourcesRepository.getEnabledSources()
-			}.filter { it.isNovelSource == isNovelScope }
-			val semaphore = Semaphore(MAX_PARALLELISM)
-			sources.map { source ->
-				launch {
-					semaphore.withPermit {
-						appendResult(searchSource(source))
-					}
+			try {
+				appendResult(searchFavorites())
+				appendResult(searchHistory())
+				appendResult(searchLocal())
+				if (localOnly.value) {
+					return@launchLoadingJob
 				}
-			}.joinAll()
+				val sources = if (pinnedOnly.value) {
+					sourcesRepository.getPinnedSources().toList()
+				} else {
+					sourcesRepository.getEnabledSources()
+				}.filter { it.isNovelSource == isNovelScope }
+				val semaphore = Semaphore(MAX_PARALLELISM)
+				sources.map { source ->
+					launch {
+						semaphore.withPermit {
+							appendResult(searchSource(source))
+						}
+					}
+				}.joinAll()
+			} finally {
+				if (generation == searchGeneration) {
+					isSearching.value = false
+				}
+			}
 		}
 	}
 

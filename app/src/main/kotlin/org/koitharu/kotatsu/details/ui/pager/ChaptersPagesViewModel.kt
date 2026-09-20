@@ -29,6 +29,7 @@ import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.prefs.observeAsStateFlow
 import org.koitharu.kotatsu.core.ui.BaseViewModel
 import org.koitharu.kotatsu.core.ui.util.ReversibleAction
+import org.koitharu.kotatsu.core.util.AlphanumComparator
 import org.koitharu.kotatsu.core.util.LocaleStringComparator
 import org.koitharu.kotatsu.core.util.ext.MutableEventFlow
 import org.koitharu.kotatsu.core.util.ext.call
@@ -104,6 +105,9 @@ abstract class ChaptersPagesViewModel(
 
 	val isDownloadedOnly = MutableStateFlow(false)
 
+	/** Some sources hand back an unordered chapter list; this re-sorts it by title for this manga only. */
+	val isChaptersSortedByName = MutableStateFlow(false)
+
 	val newChaptersCount = mangaDetails.flatMapLatest { d ->
 		if (d?.isLocal == false) {
 			interactor.observeNewChapters(d.id)
@@ -155,8 +159,10 @@ abstract class ChaptersPagesViewModel(
 		},
 		isChaptersReversed,
 		chaptersQuery,
-	) { list, reversed, query ->
-		(if (reversed) list.asReversed() else list).filterSearch(query)
+		isChaptersSortedByName,
+	) { list, reversed, query, sortByName ->
+		val sorted = if (sortByName) list.sortedWithSafe(CHAPTER_NAME_COMPARATOR) else list
+		(if (reversed) sorted.asReversed() else sorted).filterSearch(query)
 	}.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, emptyList())
 
 	val quickFilter = combine(
@@ -186,6 +192,7 @@ abstract class ChaptersPagesViewModel(
 		launchJob(Dispatchers.Default) {
 			val id = mangaDetails.filterNotNull().first().id
 			isScanlatorsMerged.value = mangaDataRepository.isScanlatorsMerged(id)
+			isChaptersSortedByName.value = settings.isChaptersSortedByName(id)
 		}
 	}
 
@@ -199,6 +206,12 @@ abstract class ChaptersPagesViewModel(
 			selectedBranch.value = null
 			reload()
 		}
+	}
+
+	fun setChaptersSortedByName(value: Boolean) {
+		val id = mangaDetails.value?.id ?: return
+		settings.setChaptersSortedByName(id, value)
+		isChaptersSortedByName.value = value
 	}
 
 	fun setSelectedBranch(branch: String?) {
@@ -355,3 +368,16 @@ abstract class ChaptersPagesViewModel(
 		NORMAL, ASK
 	}
 }
+
+/**
+ * "Sort by name": natural order on the name the row actually shows ("Chapter 9" before "Chapter 10"),
+ * falling back to the chapter number for sources that ship untitled chapters, with volume/number as
+ * the tiebreaker.
+ */
+private val CHAPTER_NAME_COMPARATOR: Comparator<ChapterListItem> =
+	compareBy(AlphanumComparator()) { it: ChapterListItem -> it.sortKey() }
+		.thenBy { it.chapter.volume }
+		.thenBy { it.chapter.number }
+
+private fun ChapterListItem.sortKey(): String = chapter.title?.takeIf { it.isNotBlank() }
+	?: chapter.numberString().orEmpty()
