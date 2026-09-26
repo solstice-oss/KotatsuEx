@@ -7,6 +7,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Rect
 import android.graphics.Typeface
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
@@ -25,6 +26,7 @@ import android.text.SpannedString
 import android.text.StaticLayout
 import android.text.TextDirectionHeuristics
 import android.text.TextPaint
+import android.text.TextUtils
 import android.text.style.AbsoluteSizeSpan
 import android.text.style.AlignmentSpan
 import android.text.style.BackgroundColorSpan
@@ -54,6 +56,8 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.widget.AppCompatTextView
 import androidx.core.graphics.ColorUtils
+import androidx.core.graphics.withClip
+import androidx.core.graphics.withTranslation
 import androidx.core.net.toUri
 import androidx.core.text.HtmlCompat
 import androidx.core.view.WindowInsetsCompat
@@ -73,6 +77,7 @@ import com.google.android.material.textfield.TextInputLayout
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -406,6 +411,9 @@ class EpubReaderFragment : BaseReaderFragment<FragmentReaderEpubBinding>() {
 		loadingChapters.clear()
 		runCatching { chapterContent?.close() }
 		chapterContent = null
+		// The chapters are only readable through the source closed above; keeping them would make a new
+		// view skip preparing the book and load every chapter it hadn't cached yet as blank.
+		chapters = emptyList()
 		super.onDestroyView()
 	}
 
@@ -549,15 +557,25 @@ class EpubReaderFragment : BaseReaderFragment<FragmentReaderEpubBinding>() {
 			val source = image.attr("href").ifBlank { image.attr("xlink:href") }
 			if (source.isNotBlank()) svg.replaceWith(image.clone().tagName("img").attr("src", source))
 		}
-		val parsed = SpannableString(
-			HtmlCompat.fromHtml(
-				document.body().html(),
-				HtmlCompat.FROM_HTML_MODE_LEGACY,
-				Html.ImageGetter { source -> loadEpubImage(chapter, source) },
-				null,
-			).trimmed(),
-		)
+		val parsed = HtmlCompat.fromHtml(
+			document.body().html(),
+			HtmlCompat.FROM_HTML_MODE_LEGACY,
+			Html.ImageGetter { source -> loadEpubImage(chapter, source) },
+			null,
+		).trimmed().withPlainSpaces()
 		return SpannedString(parsed).takeIf { it.isNotEmpty() } ?: EMPTY_CHAPTER_TEXT
+	}
+
+	/**
+	 * Justified text overflowed its line whenever the line held a no-break space (`&nbsp;`, all over
+	 * web novels): Android's justifier budgets the extra width for plain spaces only, but the text
+	 * engine then widens no-break spaces too, pushing the last letters past the edge. Same length, so
+	 * offsets (highlights, progress, TTS) are untouched.
+	 */
+	private fun CharSequence.withPlainSpaces(): Spanned {
+		val plain = SpannableString(toString().replace(' ', ' '))
+		if (this is Spanned) TextUtils.copySpansFrom(this, 0, length, null, plain, 0)
+		return plain
 	}
 
 	private fun loadEpubImage(chapter: NativeChapter, source: String): Drawable? = runCatching {
@@ -603,6 +621,9 @@ class EpubReaderFragment : BaseReaderFragment<FragmentReaderEpubBinding>() {
 			viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
 				try {
 					ensureChapterLoaded(index)
+					// A failed load stays blank and the rebind below retries it at once; pace that so a
+					// dead connection doesn't become a tight request loop.
+					if (chapters.getOrNull(index)?.content == null) delay(LOAD_RETRY_DELAY_MS)
 				} finally {
 					withContext(Dispatchers.Main) {
 						loadingChapters.remove(index)
@@ -764,6 +785,19 @@ class EpubReaderFragment : BaseReaderFragment<FragmentReaderEpubBinding>() {
 					child: View,
 					focused: View?,
 				): Boolean = true
+
+				// Once tapped, a selectable chapter view keeps focus and asks to bring its invisible
+				// cursor on screen after every rebind, which parks that cursor at the chapter start, so
+				// taps yanked the reader back to it. Paged mode never did: ViewPager2 refuses these too.
+				// Only a real selection may scroll, so a dragged handle can still reach past the edge.
+				override fun requestChildRectangleOnScreen(
+					parent: RecyclerView,
+					child: View,
+					rect: Rect,
+					immediate: Boolean,
+					focusedChildVisible: Boolean,
+				): Boolean = (child as? TextView)?.hasSelection() == true &&
+					super.requestChildRectangleOnScreen(parent, child, rect, immediate, focusedChildVisible)
 			}
 			adapter = ChapterAdapter()
 			itemAnimator = null
@@ -1629,6 +1663,8 @@ class EpubReaderFragment : BaseReaderFragment<FragmentReaderEpubBinding>() {
 		private val selectionBackgroundColor = highlightColor
 		private var selectionBackgroundSpan: SelectionBackgroundSpan? = null
 		private var suppressDoubleTap = false
+		private var justifiedSource: Layout? = null
+		private var justifiedLayout: Layout? = null
 		private val doubleTapDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
 			override fun onDown(e: MotionEvent): Boolean = true
 
@@ -1649,6 +1685,51 @@ class EpubReaderFragment : BaseReaderFragment<FragmentReaderEpubBinding>() {
 				setTextSelectHandleRight(createSelectionHandle())
 				setTextSelectHandle(createSelectionHandle())
 			}
+		}
+
+		override fun onDraw(canvas: Canvas) {
+			val justified = compatJustifiedLayout() ?: return super.onDraw(canvas)
+			// What TextView.onDraw does for this view (top gravity, no drawables, never scrolled), minus
+			// drawing its own unjustified layout. Selection is our LineBackgroundSpan, so it draws too.
+			paint.color = currentTextColor
+			paint.drawableState = drawableState
+			canvas.withClip(compoundPaddingLeft, 0, width - compoundPaddingRight, height - extendedPaddingBottom) {
+				withTranslation(compoundPaddingLeft.toFloat(), extendedPaddingTop.toFloat()) { justified.draw(this) }
+			}
+		}
+
+		/**
+		 * Android 8-14 never justify selectable text. Its DynamicLayout gives the justification mode to
+		 * the line breaker - which then lets lines run up to a third of a space too long, expecting them
+		 * to be squeezed back when drawn - but not to the drawing. So lines came out ragged, and the
+		 * overlong ones lost their last letters past the edge. Draw a StaticLayout with the very same line
+		 * breaks instead: it does justify. Android 15 fixed DynamicLayout itself.
+		 */
+		private fun compatJustifiedLayout(): Layout? {
+			if (Build.VERSION.SDK_INT > Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return null
+			if (justificationMode != Layout.JUSTIFICATION_MODE_INTER_WORD) return null
+			// TextView swaps in a new layout on every text, width or style change, so identity is the key.
+			val source = layout ?: return null
+			if (source !== justifiedSource) {
+				justifiedSource = source
+				justifiedLayout = StaticLayout.Builder.obtain(source.text, 0, source.text.length, paint, source.width)
+					.setAlignment(source.alignment)
+					.setTextDirection(
+						when {
+							Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> textDirectionHeuristic
+							textDirection == View.TEXT_DIRECTION_RTL -> TextDirectionHeuristics.RTL
+							else -> TextDirectionHeuristics.FIRSTSTRONG_LTR
+						},
+					)
+					.setLineSpacing(lineSpacingExtra, lineSpacingMultiplier)
+					.setIncludePad(includeFontPadding)
+					.setBreakStrategy(breakStrategy)
+					.setHyphenationFrequency(hyphenationFrequency)
+					.setJustificationMode(justificationMode)
+					.apply { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) setUseLineSpacingFromFallbacks(isFallbackLineSpacing) }
+					.build()
+			}
+			return justifiedLayout
 		}
 
 		override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -1907,6 +1988,7 @@ class EpubReaderFragment : BaseReaderFragment<FragmentReaderEpubBinding>() {
 		private const val EPUB_FONT_CUSTOM = "custom"
 		private const val MAX_SEARCH_RESULTS = 100
 		private const val PROGRESS_INTERVAL_MS = 50L
+		private const val LOAD_RETRY_DELAY_MS = 3000L
 		private const val PAGE_LOOKAHEAD = 1
 		private const val PRELOAD_RADIUS = 2
 		private const val SCROLL_INFO_BAR_HEIGHT_DP = 24
