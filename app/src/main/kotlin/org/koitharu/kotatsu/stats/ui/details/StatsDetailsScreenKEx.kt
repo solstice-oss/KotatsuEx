@@ -1,7 +1,6 @@
 package org.koitharu.kotatsu.stats.ui.details
 
 import android.graphics.Color
-import android.graphics.Typeface
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -47,6 +46,9 @@ import org.koitharu.kotatsu.core.model.FavouriteCategory
 import org.koitharu.kotatsu.core.model.titleResId
 import org.koitharu.kotatsu.parsers.model.MangaState
 import org.koitharu.kotatsu.stats.data.StatsDetailsDataKEx
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
+import androidx.compose.ui.unit.Dp
 import org.koitharu.kotatsu.stats.domain.StatsPeriod
 import org.koitharu.kotatsu.stats.ui.STATS_PADDING
 import java.time.LocalDate
@@ -54,11 +56,10 @@ import java.time.format.DateTimeFormatter
 import java.util.*
 import kotlin.math.roundToInt
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatsDetailsScreenKEx(
     viewModel: StatsDetailsViewModelKEx,
-    onBack: () -> Unit
+    bottomInset: Dp = 0.dp,
 ) {
     val statsData by viewModel.statsData.collectAsState()
     val selectedType by viewModel.selectedType.collectAsState()
@@ -70,42 +71,25 @@ fun StatsDetailsScreenKEx(
     val endDate by viewModel.endDate.collectAsState()
     val selectedDate by viewModel.selectedDate.collectAsState()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.statistics_details)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = null)
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { /* Search implementation */ }) {
-                        Icon(painterResource(R.drawable.ic_search), contentDescription = null)
-                    }
-                }
-            )
-        }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            FilterRowKEx(
-                selectedType = selectedType,
-                categories = categories,
-                selectedCategories = selectedCategories,
-                onTypeChange = { viewModel.selectedType.value = it },
-                onCategoryToggle = viewModel::toggleCategory,
-                onCategoriesClear = viewModel::clearCategories
-            )
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .nestedScroll(rememberNestedScrollInteropConnection())
+    ) {
+        FilterRowKEx(
+            selectedType = selectedType,
+            categories = categories,
+            selectedCategories = selectedCategories,
+            onTypeChange = { viewModel.selectedType.value = it },
+            onCategoryToggle = viewModel::toggleCategory,
+            onCategoriesClear = viewModel::clearCategories
+        )
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 32.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = bottomInset + 32.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
                 item {
                     SortActionRow(selectedSort) { viewModel.selectedSort.value = it }
                 }
@@ -134,7 +118,6 @@ fun StatsDetailsScreenKEx(
                         DetailedStatsRow(data, selectedType, totalCount, totalChaptersRead)
                     }
                 }
-            }
         }
     }
 }
