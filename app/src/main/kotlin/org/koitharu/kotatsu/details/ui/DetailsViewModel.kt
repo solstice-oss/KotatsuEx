@@ -24,6 +24,9 @@ import org.koitharu.kotatsu.bookmarks.domain.BookmarksRepository
 import androidx.core.net.toUri
 import org.koitharu.kotatsu.core.model.LocalMangaSource
 import org.koitharu.kotatsu.core.model.getPreferredBranch
+import org.koitharu.kotatsu.core.model.unwrap
+import org.koitharu.kotatsu.explore.data.MangaSourcesRepository
+import org.koitharu.kotatsu.mangadex.data.MangaDexUrlUtilKEx
 import org.koitharu.kotatsu.local.data.isEpubFile
 import java.io.File
 import org.koitharu.kotatsu.core.nav.MangaIntent
@@ -86,6 +89,9 @@ class DetailsViewModel @Inject constructor(
 	private val database: MangaDatabase,
 	private val mangaDataRepository: MangaDataRepository,
 	mangaRepositoryFactory: MangaRepository.Factory,
+	// KEx -->
+	private val sourcesRepository: MangaSourcesRepository,
+	// KEx <--
 ) : ChaptersPagesViewModel(
 	settings = settings,
 	interactor = interactor,
@@ -116,6 +122,24 @@ class DetailsViewModel @Inject constructor(
 	val favouriteCategories = interactor.observeFavourite(mangaId)
 		.withErrorHandling()
 		.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, emptySet())
+
+	// KEx -->
+	val isMangaDexCoversAvailable: StateFlow<Boolean> = combine(
+		mangaDetails,
+		sourcesRepository.observeEnabledSources(),
+	) { details, enabledSources ->
+		if (details == null) return@combine false
+		val manga = details.toManga()
+		val remoteUrl = manga.publicUrl ?: manga.url
+		if (MangaDexUrlUtilKEx.extractTitleId(remoteUrl) == null) return@combine false
+		val source = manga.source.unwrap()
+		val isMangaDexEntry = MangaDexUrlUtilKEx.isMangaDexSource(source)
+		if (!isMangaDexEntry && source != LocalMangaSource) return@combine false
+		enabledSources.any { MangaDexUrlUtilKEx.isMangaDexSource(it.mangaSource) }
+	}.withErrorHandling()
+		.map { it == true }
+		.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, false)
+	// KEx <--
 
 	val isStatsAvailable = statsRepository.observeHasStats(mangaId)
 		.withErrorHandling()

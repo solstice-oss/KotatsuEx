@@ -153,6 +153,9 @@
 		<activity
 			android:name="org.koitharu.kotatsu.stats.ui.details.StatsDetailsActivityKEx"
 			android:label="@string/statistics_details" />
+		<activity
+			android:name="org.koitharu.kotatsu.mangadex.ui.MangaDexCoversActivityKEx"
+			android:label="@string/mangadex_covers" />
 		<!-- KEx <- !-->
 		<activity
 			android:name="org.koitharu.kotatsu.browser.BrowserActivity"

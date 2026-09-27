@@ -48,4 +48,12 @@
 	<string name="not_tracked">Not tracked</string>
 	<string name="not_started">Not started</string>
 	<string name="no_data_for_filters">No data found for your current filters</string>
+
+	<!-- MangaDex Covers -->
+	<string name="mangadex_covers">MangaDex Covers</string>
+	<string name="no_covers_found">No covers found</string>
+	<string name="failed_to_load_covers">Failed to load covers</string>
+	<string name="action_retry">Retry</string>
+	<string name="cover_item_description">Volume %1$s cover</string>
+	<string name="cover_item_default_description">Cover %1$d</string>
 </resources>

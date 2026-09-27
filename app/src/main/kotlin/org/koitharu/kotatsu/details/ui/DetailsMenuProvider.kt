@@ -64,6 +64,9 @@ class DetailsMenuProvider(
 		menu.findItem(R.id.action_stats).isVisible = viewModel.isStatsAvailable.value
 		// Novels and local books only — there is nothing to put in an epub for an image manga.
 		menu.findItem(R.id.action_export_epub).isVisible = manga?.isEpub == true
+		// KEx -->
+		menu.findItem(R.id.action_mangadex_covers)?.isVisible = viewModel.isMangaDexCoversAvailable.value
+		// KEx <--
 	}
 
 	override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
@@ -134,6 +137,12 @@ class DetailsMenuProvider(
 				val intent = AppRouter.overrideEditIntent(activity, original)
 				activityForResultLauncher.launch(intent)
 			}
+
+			// KEx -->
+			R.id.action_mangadex_covers -> {
+				router.openMangaDexCovers(manga)
+			}
+			// KEx <--
 
 			else -> return false
 		}

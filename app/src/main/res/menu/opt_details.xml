@@ -61,6 +61,16 @@
 		android:title="@string/alternatives"
 		app:showAsAction="never" />
 
+	<!-- KEx -> !-->
+	<item
+		android:id="@+id/action_mangadex_covers"
+		android:icon="@drawable/ic_images"
+		android:orderInCategory="50"
+		android:title="@string/mangadex_covers"
+		android:visible="false"
+		app:showAsAction="never" />
+	<!-- KEx <- !-->
+
 	<item
 		android:id="@+id/action_online"
 		android:icon="@drawable/ic_web"

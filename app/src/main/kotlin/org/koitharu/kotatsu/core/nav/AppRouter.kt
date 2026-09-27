@@ -78,6 +78,7 @@ import org.koitharu.kotatsu.list.ui.sort.ListSortSheet
 import org.koitharu.kotatsu.local.ui.ImportDialogFragment
 import org.koitharu.kotatsu.local.ui.info.LocalInfoDialog
 import org.koitharu.kotatsu.main.ui.MainActivity
+import org.koitharu.kotatsu.mangadex.ui.MangaDexCoversActivityKEx
 import org.koitharu.kotatsu.massmigrate.AlternativesActivityKEx
 import org.koitharu.kotatsu.parsers.model.Manga
 import org.koitharu.kotatsu.parsers.model.MangaListFilter
@@ -210,6 +211,15 @@ class AppRouter private constructor(
                 .putExtra(KEY_MANGA, ParcelableManga(manga)),
         )
     }
+
+    // KEx -->
+    fun openMangaDexCovers(manga: Manga) {
+        startActivity(
+            Intent(contextOrNull() ?: return, MangaDexCoversActivityKEx::class.java)
+                .putExtra(KEY_MANGA, ParcelableManga(manga, withDescription = false)),
+        )
+    }
+    // KEx <--
 
     fun openImage(
         url: String,
