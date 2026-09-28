@@ -211,13 +211,12 @@ class MassMigrateActivityKEx : BaseActivity<ActivityMassMigrateKexBinding>() {
 				Surface(
 					color = MaterialTheme.colorScheme.surface,
 					tonalElevation = 3.dp,
-					modifier = Modifier
-						.fillMaxWidth()
-						.navigationBarsPadding(),
+					modifier = Modifier.fillMaxWidth(),
 				) {
 					Box(
 						modifier = Modifier
 							.fillMaxWidth()
+							.navigationBarsPadding()
 							.padding(horizontal = 16.dp, vertical = 12.dp),
 					) {
 						Button(
@@ -239,13 +238,12 @@ class MassMigrateActivityKEx : BaseActivity<ActivityMassMigrateKexBinding>() {
 				Surface(
 					color = MaterialTheme.colorScheme.surface,
 					tonalElevation = 3.dp,
-					modifier = Modifier
-						.fillMaxWidth()
-						.navigationBarsPadding(),
+					modifier = Modifier.fillMaxWidth(),
 				) {
 					Box(
 						modifier = Modifier
 							.fillMaxWidth()
+							.navigationBarsPadding()
 							.padding(horizontal = 16.dp, vertical = 12.dp),
 					) {
 						Button(
@@ -267,13 +265,12 @@ class MassMigrateActivityKEx : BaseActivity<ActivityMassMigrateKexBinding>() {
 				Surface(
 					color = MaterialTheme.colorScheme.surface,
 					tonalElevation = 3.dp,
-					modifier = Modifier
-						.fillMaxWidth()
-						.navigationBarsPadding(),
+					modifier = Modifier.fillMaxWidth(),
 				) {
 					Row(
 						modifier = Modifier
 							.fillMaxWidth()
+							.navigationBarsPadding()
 							.padding(horizontal = 16.dp, vertical = 12.dp),
 						horizontalArrangement = Arrangement.spacedBy(16.dp),
 					) {
@@ -305,13 +302,12 @@ class MassMigrateActivityKEx : BaseActivity<ActivityMassMigrateKexBinding>() {
 				Surface(
 					color = MaterialTheme.colorScheme.surface,
 					tonalElevation = 3.dp,
-					modifier = Modifier
-						.fillMaxWidth()
-						.navigationBarsPadding(),
+					modifier = Modifier.fillMaxWidth(),
 				) {
 					Box(
 						modifier = Modifier
 							.fillMaxWidth()
+							.navigationBarsPadding()
 							.padding(horizontal = 16.dp, vertical = 12.dp),
 					) {
 						Button(
