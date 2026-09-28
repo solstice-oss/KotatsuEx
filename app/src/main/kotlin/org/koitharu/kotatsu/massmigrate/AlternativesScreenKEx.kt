@@ -81,11 +81,19 @@ class AlternativesActivityKEx : BaseActivity<ActivityAlternativesBinding>(),
 
 	private val viewModel by viewModels<AlternativesViewModelKEx>()
 
+	override fun setTitle(title: CharSequence?) {
+		super.setTitle(title)
+		viewBinding.collapsingToolbarLayout.title = title
+	}
+
+	override fun setTitle(titleId: Int) {
+		setTitle(getText(titleId))
+	}
+
 	override fun onCreate(savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
 		setContentView(ActivityAlternativesBinding.inflate(layoutInflater))
 		setDisplayHomeAsUp(isEnabled = true, showUpAsClose = false)
-		viewBinding.collapsingToolbarLayout.subtitle = null
 		val listAdapter = BaseListAdapter<ListModel>()
 			.addDelegate(ListItemType.MANGA_LIST_DETAILED, alternativeAD(coil, this, this))
 			.addDelegate(ListItemType.STATE_EMPTY, emptyStateListAD(null))
@@ -158,15 +166,15 @@ class AlternativesActivityKEx : BaseActivity<ActivityAlternativesBinding>(),
 		insets: WindowInsetsCompat
 	): WindowInsetsCompat {
 		val barsInsets = insets.systemBarsInsets
-		viewBinding.recyclerView.updatePadding(
-			left = barsInsets.left,
-			right = barsInsets.right,
-			bottom = barsInsets.bottom,
-		)
 		viewBinding.appbar.updatePadding(
 			left = barsInsets.left,
 			right = barsInsets.right,
 			top = barsInsets.top,
+		)
+		viewBinding.recyclerView.updatePadding(
+			left = barsInsets.left,
+			right = barsInsets.right,
+			bottom = barsInsets.bottom,
 		)
 		return insets.consumeAllSystemBarsInsets()
 	}

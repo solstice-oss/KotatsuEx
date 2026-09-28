@@ -12,6 +12,8 @@ import kotlinx.coroutines.withContext
 import org.koitharu.kotatsu.core.db.MangaDatabase
 import org.koitharu.kotatsu.core.db.entity.toMangaList
 import org.koitharu.kotatsu.core.model.chaptersCount
+import org.koitharu.kotatsu.core.model.MangaSource as createMangaSource
+import org.koitharu.kotatsu.core.model.getStoredTitleOrNull
 import org.koitharu.kotatsu.core.parser.MangaRepository
 import org.koitharu.kotatsu.core.ui.BaseViewModel
 import org.koitharu.kotatsu.explore.data.MangaSourcesRepository
@@ -43,9 +45,13 @@ class MassMigrateViewModelKEx @Inject constructor(
 			_state.update { it.copy(isLoading = true) }
 			database.getMangaDao().observeLibrarySourceUsage().collect { usages ->
 				val sources = usages.map { 
+					val sourceObj = createMangaSource(it.source)
+					val displayTitle = sourceObj.getStoredTitleOrNull() 
+						?: it.sourceTitle?.takeIf { t -> t.isNotBlank() && t.toLongOrNull() == null } 
+						?: it.source
 					LibrarySourceOptionKEx(
 						key = it.source, 
-						title = it.sourceTitle ?: it.source, 
+						title = displayTitle, 
 						mangaCount = it.mangaCount
 					) 
 				}

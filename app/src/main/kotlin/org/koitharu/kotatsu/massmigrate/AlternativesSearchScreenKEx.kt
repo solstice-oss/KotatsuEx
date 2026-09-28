@@ -6,13 +6,11 @@ import android.view.Menu
 import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
-import android.view.ViewGroup
 import android.widget.EditText
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.core.view.MenuProvider
 import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.updateLayoutParams
 import androidx.core.view.updatePadding
 import dagger.hilt.android.AndroidEntryPoint
 import org.koitharu.kotatsu.R
@@ -29,7 +27,7 @@ import org.koitharu.kotatsu.core.util.ext.consumeAllSystemBarsInsets
 import org.koitharu.kotatsu.core.util.ext.observe
 import org.koitharu.kotatsu.core.util.ext.observeEvent
 import org.koitharu.kotatsu.core.util.ext.systemBarsInsets
-import org.koitharu.kotatsu.databinding.ActivitySearchBinding
+import org.koitharu.kotatsu.databinding.ActivityAlternativesBinding
 import org.koitharu.kotatsu.list.domain.ListFilterOption
 import org.koitharu.kotatsu.list.ui.MangaSelectionDecoration
 import org.koitharu.kotatsu.list.ui.adapter.MangaListListener
@@ -48,7 +46,7 @@ const val KEY_ORIGINAL_ID = "original_id"
 
 @AndroidEntryPoint
 class AlternativesSearchActivityKEx :
-	BaseActivity<ActivitySearchBinding>(),
+	BaseActivity<ActivityAlternativesBinding>(),
 	MangaListListener {
 
 	@Inject
@@ -63,10 +61,19 @@ class AlternativesSearchActivityKEx :
 		}
 	}
 
+	override fun setTitle(title: CharSequence?) {
+		super.setTitle(title)
+		viewBinding.collapsingToolbarLayout.title = title
+	}
+
+	override fun setTitle(titleId: Int) {
+		setTitle(getText(titleId))
+	}
+
 	override fun onCreate(savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
-		setContentView(ActivitySearchBinding.inflate(layoutInflater))
-		title = viewModel.query
+		setContentView(ActivityAlternativesBinding.inflate(layoutInflater))
+		setTitle(viewModel.query)
 
 		val itemClickListener = OnListItemClickListener<SearchResultsListModel> { item, _ ->
 			val selectedManga = item.list?.firstOrNull()?.toMangaWithOverride() ?: return@OnListItemClickListener
@@ -88,7 +95,6 @@ class AlternativesSearchActivityKEx :
 		viewBinding.recyclerView.addItemDecoration(TypedListSpacingDecoration(this, true))
 
 		setDisplayHomeAsUp(isEnabled = true, showUpAsClose = false)
-		supportActionBar?.setSubtitle(R.string.search_results)
 
 		addMenuProvider(object : MenuProvider {
 			override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
@@ -140,9 +146,6 @@ class AlternativesSearchActivityKEx :
 			left = barsInsets.left,
 			right = barsInsets.right,
 		)
-		viewBinding.statusBarScrim.updateLayoutParams<ViewGroup.MarginLayoutParams> {
-			height = barsInsets.top
-		}
 		viewBinding.recyclerView.setPadding(
 			left = barsInsets.left,
 			top = 0,
