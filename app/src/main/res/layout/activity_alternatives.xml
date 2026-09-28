@@ -29,6 +29,13 @@
 
 		</com.google.android.material.appbar.CollapsingToolbarLayout>
 
+		<!-- KEx -> !-->
+		<androidx.compose.ui.platform.ComposeView
+			android:id="@+id/composeViewFilter"
+			android:layout_width="match_parent"
+			android:layout_height="wrap_content" />
+		<!-- KEx <- !-->
+
 	</com.google.android.material.appbar.AppBarLayout>
 
 	<org.koitharu.kotatsu.core.ui.list.fastscroll.FastScrollRecyclerView

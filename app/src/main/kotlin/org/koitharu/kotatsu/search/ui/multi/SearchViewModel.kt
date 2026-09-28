@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
@@ -159,6 +160,21 @@ class SearchViewModel @Inject constructor(
 		}
 	}
 
+	// KEx -->
+	val installedSources: StateFlow<List<MangaSource>> = sourcesRepository.observeEnabledSources()
+		.map { list -> list.map { it.mangaSource } }
+		.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, emptyList())
+
+	val selectedSourceKeys = MutableStateFlow<Set<String>>(emptySet())
+
+	fun setSourceFilter(keys: Set<String>) {
+		if (selectedSourceKeys.value != keys) {
+			selectedSourceKeys.value = keys
+			retry()
+		}
+	}
+	// KEx <--
+
 	private fun doSearch() {
 		val prevJob = searchJob
 		val generation = ++searchGeneration
@@ -172,7 +188,12 @@ class SearchViewModel @Inject constructor(
 				if (localOnly.value) {
 					return@launchLoadingJob
 				}
-				val sources = if (pinnedOnly.value) {
+				// KEx -->
+				val keys = selectedSourceKeys.value
+				val sources = if (keys.isNotEmpty()) {
+					sourcesRepository.getEnabledSources().filter { it.name in keys }
+				} else if (pinnedOnly.value) {
+				// KEx <--
 					sourcesRepository.getPinnedSources().toList()
 				} else {
 					sourcesRepository.getEnabledSources()

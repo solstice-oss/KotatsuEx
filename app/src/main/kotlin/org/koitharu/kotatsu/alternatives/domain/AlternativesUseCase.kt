@@ -27,11 +27,12 @@ class AlternativesUseCase @Inject constructor(
 	private val mangaRepositoryFactory: MangaRepository.Factory,
 ) {
 
-	suspend operator fun invoke(manga: Manga, query: String? = null): Flow<Manga> { // <-- KEx
+	suspend operator fun invoke(manga: Manga, query: String? = null, targetSources: List<MangaSource>? = null,): Flow<Manga> { // <-- KEx
 		// Same kind only. A manga migrated onto a novel source (or the reverse) lands in the wrong
 		// reader with content it cannot load, so those are never offered as alternatives.
 		val isNovel = manga.source.isNovelSource
-		val sources = getSources().filter { it != manga.source && it.isNovelSource == isNovel }
+		val baseSources = if (!targetSources.isNullOrEmpty()) targetSources else getSources() // <-- KEx
+		val sources = baseSources.filter { it != manga.source && it.isNovelSource == isNovel } // <-- KEx
 		if (sources.isEmpty()) {
 			return emptyFlow()
 		}

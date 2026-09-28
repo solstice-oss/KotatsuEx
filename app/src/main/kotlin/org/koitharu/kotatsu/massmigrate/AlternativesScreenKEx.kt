@@ -9,6 +9,23 @@ import android.view.View
 import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.core.view.MenuProvider
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
@@ -24,6 +41,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.plus
 import org.koitharu.kotatsu.R
@@ -53,6 +71,7 @@ import org.koitharu.kotatsu.core.util.ext.require
 import org.koitharu.kotatsu.core.util.ext.roundTopCorners
 import org.koitharu.kotatsu.core.util.ext.systemBarsInsets
 import org.koitharu.kotatsu.databinding.ActivityAlternativesBinding
+import org.koitharu.kotatsu.explore.data.MangaSourcesRepository
 import org.koitharu.kotatsu.list.domain.MangaListMapper
 import org.koitharu.kotatsu.list.ui.adapter.ListItemType
 import org.koitharu.kotatsu.list.ui.adapter.ListStateHolderListener
@@ -67,8 +86,10 @@ import org.koitharu.kotatsu.list.ui.model.LoadingFooter
 import org.koitharu.kotatsu.list.ui.model.LoadingState
 import org.koitharu.kotatsu.list.ui.model.MangaGridModel
 import org.koitharu.kotatsu.parsers.model.Manga
+import org.koitharu.kotatsu.parsers.model.MangaSource
 import org.koitharu.kotatsu.parsers.util.suspendlazy.getOrDefault
 import org.koitharu.kotatsu.parsers.util.suspendlazy.suspendLazy
+import org.koitharu.kotatsu.settings.compose.DropSauceTheme
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -111,6 +132,55 @@ class AlternativesActivityKEx : BaseActivity<ActivityAlternativesBinding>(),
 		}
 
 		title = viewModel.query ?: viewModel.manga.title
+
+		viewBinding.composeViewFilter.setViewCompositionStrategy(
+			ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed,
+		)
+		viewBinding.composeViewFilter.setContent {
+			DropSauceTheme {
+				val installedSources by viewModel.installedSources.collectAsState()
+				val selectedKeys by viewModel.selectedSourceKeys.collectAsState()
+				var showDialog by remember { mutableStateOf(false) }
+
+				Row(
+					modifier = Modifier
+						.fillMaxWidth()
+						.padding(horizontal = 16.dp, vertical = 6.dp),
+				) {
+					FilterChip(
+						selected = selectedKeys.isNotEmpty(),
+						onClick = { showDialog = true },
+						label = {
+							Text(
+								text = if (selectedKeys.isEmpty()) {
+									stringResource(R.string.source)
+								} else {
+									"${stringResource(R.string.source)} (${selectedKeys.size})"
+								},
+							)
+						},
+						leadingIcon = {
+							Icon(
+								painter = painterResource(R.drawable.ic_manga_source),
+								contentDescription = null,
+								modifier = Modifier.size(18.dp),
+							)
+						},
+					)
+				}
+
+				if (showDialog) {
+					SourcesFilterDialogKEx(
+						installedSources = installedSources,
+						initialSelectedKeys = selectedKeys,
+						onDismiss = { showDialog = false },
+						onApply = { keys ->
+							viewModel.setSourceFilter(keys)
+						},
+					)
+				}
+			}
+		}
 
 		addMenuProvider(object : MenuProvider {
 			override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
@@ -221,10 +291,17 @@ class AlternativesViewModelKEx @Inject constructor(
 	private val alternativesUseCase: AlternativesUseCase,
 	private val massMigrateUseCase: MassMigrateUseCaseKEx,
 	private val mangaListMapper: MangaListMapper,
+	private val sourcesRepository: MangaSourcesRepository,
 ) : BaseViewModel() {
 
 	val manga = savedStateHandle.require<ParcelableManga>(AppRouter.KEY_MANGA).manga
 	val query = savedStateHandle.get<String>(AppRouter.KEY_QUERY)
+
+	val installedSources: StateFlow<List<MangaSource>> = sourcesRepository.observeEnabledSources()
+		.map { list -> list.map { it.mangaSource } }
+		.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, emptyList())
+
+	val selectedSourceKeys = MutableStateFlow<Set<String>>(emptySet())
 
 	private val results = MutableStateFlow<List<MangaAlternativeModel>>(emptyList())
 
@@ -263,6 +340,13 @@ class AlternativesViewModelKEx @Inject constructor(
 		doSearch()
 	}
 
+	fun setSourceFilter(keys: Set<String>) {
+		if (selectedSourceKeys.value != keys) {
+			selectedSourceKeys.value = keys
+			retry()
+		}
+	}
+
 	fun retry() {
 		searchJob?.cancel()
 		results.value = emptyList()
@@ -285,7 +369,13 @@ class AlternativesViewModelKEx @Inject constructor(
 			prevJob?.cancelAndJoin()
 			val ref = mangaDetails.getOrDefault(manga)
 			val refCount = ref.chaptersCount()
-			alternativesUseCase.invoke(ref, query)
+			val keys = selectedSourceKeys.value
+			val targetSources = if (keys.isNotEmpty()) {
+				sourcesRepository.getEnabledSources().filter { it.name in keys }
+			} else {
+				null
+			}
+			alternativesUseCase.invoke(ref, query, targetSources)
 				.collect {
 					val model = MangaAlternativeModel(
 						mangaModel = mangaListMapper.toListModel(it, ListMode.GRID) as MangaGridModel,

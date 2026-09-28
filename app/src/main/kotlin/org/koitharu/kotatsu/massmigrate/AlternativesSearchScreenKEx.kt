@@ -9,6 +9,23 @@ import android.view.View
 import android.widget.EditText
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.core.view.MenuProvider
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
@@ -40,6 +57,7 @@ import org.koitharu.kotatsu.parsers.model.MangaTag
 import org.koitharu.kotatsu.search.ui.multi.SearchViewModel
 import org.koitharu.kotatsu.search.ui.multi.SearchResultsListModel
 import org.koitharu.kotatsu.search.ui.multi.adapter.SearchAdapter
+import org.koitharu.kotatsu.settings.compose.DropSauceTheme
 import javax.inject.Inject
 
 const val KEY_ORIGINAL_ID = "original_id"
@@ -95,6 +113,55 @@ class AlternativesSearchActivityKEx :
 		viewBinding.recyclerView.addItemDecoration(TypedListSpacingDecoration(this, true))
 
 		setDisplayHomeAsUp(isEnabled = true, showUpAsClose = false)
+
+		viewBinding.composeViewFilter.setViewCompositionStrategy(
+			ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed,
+		)
+		viewBinding.composeViewFilter.setContent {
+			DropSauceTheme {
+				val installedSources by viewModel.installedSources.collectAsState()
+				val selectedKeys by viewModel.selectedSourceKeys.collectAsState()
+				var showDialog by remember { mutableStateOf(false) }
+
+				Row(
+					modifier = Modifier
+						.fillMaxWidth()
+						.padding(horizontal = 16.dp, vertical = 6.dp),
+				) {
+					FilterChip(
+						selected = selectedKeys.isNotEmpty(),
+						onClick = { showDialog = true },
+						label = {
+							Text(
+								text = if (selectedKeys.isEmpty()) {
+									stringResource(R.string.source)
+								} else {
+									"${stringResource(R.string.source)} (${selectedKeys.size})"
+								},
+							)
+						},
+						leadingIcon = {
+							Icon(
+								painter = painterResource(R.drawable.ic_manga_source),
+								contentDescription = null,
+								modifier = Modifier.size(18.dp),
+							)
+						},
+					)
+				}
+
+				if (showDialog) {
+					SourcesFilterDialogKEx(
+						installedSources = installedSources,
+						initialSelectedKeys = selectedKeys,
+						onDismiss = { showDialog = false },
+						onApply = { keys ->
+							viewModel.setSourceFilter(keys)
+						},
+					)
+				}
+			}
+		}
 
 		addMenuProvider(object : MenuProvider {
 			override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
