@@ -37,6 +37,7 @@ CLAUDE.md
 # Unrelated scratch files that end up in the project root
 /*.json
 /*.html
+/AGENTS.md
 
 
 /gradle/gradle-daemon-jvm.properties

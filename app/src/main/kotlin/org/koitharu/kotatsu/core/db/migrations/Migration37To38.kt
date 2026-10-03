@@ -1,11 +1,11 @@
+// Fork-specific migration
 package org.koitharu.kotatsu.core.db.migrations
 
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import org.koitharu.kotatsu.stats.ui.details.StatsDetailsTypeKEx
-import java.util.Locale
 
-class Migration37To38KEx : Migration(37, 38) {
+class Migration37To38 : Migration(37, 38) {
 
     override fun migrate(db: SupportSQLiteDatabase) {
         // Add series_type column
