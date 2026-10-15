@@ -28,6 +28,7 @@ import org.koitharu.kotatsu.mihon.model.ExternalRepoInfo
 import org.koitharu.kotatsu.settings.sources.catalog.ExtensionInstallMode
 import org.koitharu.kotatsu.settings.sources.catalog.ExtensionStoreRegistryState
 import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.core.model.ContentWarning
 import org.koitharu.kotatsu.core.model.ZoomMode
 import org.koitharu.kotatsu.core.network.DoHProvider
 import org.koitharu.kotatsu.core.prefs.DetailsUiMode.COMPACT
@@ -254,9 +255,21 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 		get() = prefs.getEnumValue(KEY_LIST_MODE_FAVORITES, listMode)
 		set(value) = prefs.edit { putEnumValue(KEY_LIST_MODE_FAVORITES, value) }
 
-	var isNsfwContentDisabled: Boolean
-		get() = prefs.getBoolean(KEY_DISABLE_NSFW, false)
-		set(value) = prefs.edit { putBoolean(KEY_DISABLE_NSFW, value) }
+	/**
+	 * The most adult [ContentWarning] whose extensions are shown: all of them, up to Mixed, or SFW only.
+	 * Falls back to the old single "Disable NSFW" switch, which meant SFW only.
+	 */
+	var contentFilter: ContentWarning
+		get() = prefs.getString(KEY_CONTENT_FILTER, null)?.let { x -> ContentWarning.entries.find { it.name == x } }
+			?: if (prefs.getBoolean(KEY_DISABLE_NSFW_LEGACY, false)) ContentWarning.SAFE else ContentWarning.NSFW
+		set(value) = prefs.edit {
+			putString(KEY_CONTENT_FILTER, value.name)
+			remove(KEY_DISABLE_NSFW_LEGACY)
+		}
+
+	/** Adult manga are hidden wherever 18+ extensions are. */
+	val isNsfwContentDisabled: Boolean
+		get() = contentFilter < ContentWarning.NSFW
 
 	var appLocales: LocaleListCompat
 		get() {
@@ -395,6 +408,12 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 	var epubCustomFontRevision: Int
 		get() = prefs.getInt(KEY_EPUB_CUSTOM_FONT_REVISION, 0)
 		set(value) = prefs.edit { putInt(KEY_EPUB_CUSTOM_FONT_REVISION, value) }
+
+	val isReaderRotateWideEnabled: Boolean
+		get() = prefs.getBoolean(KEY_READER_ROTATE_WIDE, false)
+
+	val isReaderRotateWideInverted: Boolean
+		get() = prefs.getBoolean(KEY_READER_ROTATE_WIDE_INVERT, false)
 
 	val isReaderZoomButtonsEnabled: Boolean
 		get() = prefs.getBoolean(KEY_READER_ZOOM_BUTTONS, false)
@@ -1000,6 +1019,11 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 		get() = prefs.getEnumValue(KEY_FAVORITES_ORDER, ListSortOrder.NEWEST)
 		set(value) = prefs.edit { putEnumValue(KEY_FAVORITES_ORDER, value) }
 
+	/** Sort given to new categories; picking one also rewrites every existing category's sort. */
+	var defaultCategorySortOrder: ListSortOrder
+		get() = prefs.getEnumValue(KEY_CATEGORY_DEFAULT_ORDER, ListSortOrder.NEWEST)
+		set(value) = prefs.edit { putEnumValue(KEY_CATEGORY_DEFAULT_ORDER, value) }
+
 	// comma-joined in pin order, oldest pin first
 	fun getPinnedFavourites(categoryId: Long): List<Long> =
 		prefs.getString(KEY_FAVORITES_PINNED + categoryId, null)
@@ -1345,6 +1369,8 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 		const val EPUB_CUSTOM_FONT_FILE = "epub_custom_font"
 		const val KEY_READER_MODE_DETECT = "reader_mode_detect"
 		const val KEY_READER_CROP = "reader_crop"
+		const val KEY_READER_ROTATE_WIDE = "reader_rotate_wide"
+		const val KEY_READER_ROTATE_WIDE_INVERT = "reader_rotate_wide_invert"
 		const val KEY_PROTECT_APP = "protect_app"
 		const val KEY_PROTECT_APP_TIMEOUT = "protect_app_timeout"
 		const val KEY_APP_PASSWORD = "app_password"
@@ -1387,6 +1413,7 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 		const val KEY_LOCAL_LIST_ORDER = "local_order"
 		const val KEY_HISTORY_ORDER = "history_order"
 		const val KEY_FAVORITES_ORDER = "fav_order"
+		const val KEY_CATEGORY_DEFAULT_ORDER = "category_default_order"
 		const val KEY_FAVORITES_PINNED = "fav_pinned_order_"
 		const val KEY_WEBTOON_GAPS = "webtoon_gaps"
 		const val KEY_WEBTOON_ZOOM = "webtoon_zoom"
@@ -1411,7 +1438,8 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 		const val KEY_PROXY_PASSWORD = "proxy_password"
 		const val KEY_IMAGES_PROXY = "images_proxy_2"
 		const val KEY_LOCAL_MANGA_DIRS = "local_manga_dirs"
-		const val KEY_DISABLE_NSFW = "no_nsfw"
+		const val KEY_CONTENT_FILTER = "content_filter"
+		const val KEY_DISABLE_NSFW_LEGACY = "no_nsfw"
 		const val KEY_RELATED_MANGA = "related_manga"
 		const val KEY_SCROBBLING_PROGRESS_SYNC = "scrobbling_progress_sync"
 		const val KEY_NAV_MAIN = "nav_main"
@@ -1470,15 +1498,6 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 		const val KEY_ONBOARDING_INSTALL_ID = "onboarding_install_id"
 
 		/**
-		 * Keys that describe THIS device's layout rather than the user's library, so they are never
-		 * carried by a backup or by Drive sync. Syncing them means a snapshot taken on another device
-		 * (or before a default changed) silently flips the setting back at whatever moment a sync runs.
-		 */
-		val DEVICE_LOCAL_KEYS = setOf(
-			KEY_NAV_PINNED,
-		)
-
-		/**
 		 * Keys that must never leave the device: credentials, app-lock state and per-install ids.
 		 * Stripped from local backups and cloud sync, both when writing and when applying.
 		 */
@@ -1497,28 +1516,14 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 		)
 
 		/**
-		 * Kept out of Drive sync (but not backups): this device's layout, storage locations, installer
-		 * capabilities, caches and one-shot flags. Several are written by the app itself, so syncing them
-		 * would make background writes look like user edits.
+		 * Kept out of Drive sync (but not backups): every user-facing setting syncs except app lock
+		 * ([SENSITIVE_BACKUP_KEYS]). What stays here only makes sense on this device (storage folders,
+		 * installer capabilities, a font file) or is written by the app itself (caches, one-shot flags),
+		 * where syncing would make background writes look like user edits.
 		 */
 		private val SYNC_LOCAL_KEYS = setOf(
-			KEY_GRID_SIZE,
-			KEY_GRID_SIZE_PAGES,
-			KEY_GRID_SPACING_INCREASED,
-			KEY_GRID_VIEW_CHAPTERS,
-			KEY_LIST_MODE,
-			KEY_LIST_MODE_HISTORY,
-			KEY_LIST_MODE_FAVORITES,
-			KEY_LIST_MODE_SUGGESTIONS,
-			KEY_SOURCES_GRID,
-			KEY_UI_SCALE,
 			KEY_UI_SCALE_RESET,
-			KEY_NAV_MAIN,
-			KEY_NAV_LABELS,
-			KEY_NAV_LEGACY,
 			KEY_NAV_PINNED_RESET,
-			KEY_READER_DOUBLE_FOLDABLE,
-			KEY_32BIT_COLOR,
 			KEY_LOCAL_STORAGE,
 			KEY_LOCAL_MANGA_DIRS,
 			KEY_PAGES_SAVE_DIR,
@@ -1531,11 +1536,6 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 			KEY_BACKUP_PERIODICAL_COUNT,
 			KEY_SHIZUKU_INSTALLER,
 			KEY_PRIVATE_INSTALLER,
-			KEY_AUTO_UPDATE_EXTENSIONS,
-			KEY_PROXY_TYPE,
-			KEY_PROXY_ADDRESS,
-			KEY_PROXY_PORT,
-			KEY_VERBOSE_LOGGING,
 			KEY_DISCORD_TOKEN,
 			KEY_EXTENSION_UPDATES_AVAILABLE,
 			KEY_LAST_EXTENSION_UPDATE_NOTIFICATION_TIME,
@@ -1550,7 +1550,6 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 		)
 
 		fun isSyncableKey(key: String): Boolean = key !in SENSITIVE_BACKUP_KEYS &&
-			key !in DEVICE_LOCAL_KEYS &&
 			key !in SYNC_LOCAL_KEYS &&
 			!key.startsWith(KEY_LIST_CHECKPOINT + '_') // per-list scroll positions
 

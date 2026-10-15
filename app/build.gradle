@@ -23,8 +23,8 @@ android {
 		applicationId = 'org.haziffe.dropsaucefork'
 		minSdk = 26
 		targetSdk = 37
-		versionCode = 74
-		versionName = '0.9.8'
+		versionCode = 75
+		versionName = '0.9.9'
 		testInstrumentationRunner = 'org.koitharu.kotatsu.HiltTestRunner'
 		ksp {
 			arg('room.generateKotlin', 'true')
@@ -152,9 +152,7 @@ kotlin {
 			// surface in the app (see DropSauceTheme), so opt in once here instead of per file.
 			'-opt-in=androidx.compose.material3.ExperimentalMaterial3ExpressiveApi',
 			'-opt-in=org.koitharu.kotatsu.parsers.InternalParsersApi',
-			'-Xjspecify-annotations=strict',
-			'-Xannotation-default-target=first-only',
-			'-Xcontext-parameters'
+			'-Xjspecify-annotations=strict'
 		])
 	}
 }

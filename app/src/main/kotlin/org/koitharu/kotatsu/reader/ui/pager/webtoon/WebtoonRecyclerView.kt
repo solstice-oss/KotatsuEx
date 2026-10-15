@@ -57,6 +57,22 @@ class WebtoonRecyclerView @JvmOverloads constructor(
 		detachedViews.remove(child)
 	}
 
+	override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+		super.onLayout(changed, l, t, r, b)
+		// Pages reused after a jump keep their old inner scroll; a page cut by an edge must show the side facing the screen.
+		forEach { child ->
+			val ssiv = (child as WebtoonFrameLayout).target
+			val target = when {
+				child.top < 0 -> ssiv.getScrollRange()
+				child.top > 0 -> 0
+				else -> return@forEach
+			}
+			if (ssiv.getScroll() != target) {
+				ssiv.scrollBy(target - ssiv.getScroll())
+			}
+		}
+	}
+
 	override fun startNestedScroll(axes: Int) = startNestedScroll(axes, TYPE_TOUCH)
 
 	override fun startNestedScroll(axes: Int, type: Int): Boolean = isNotEmpty()
@@ -89,36 +105,40 @@ class WebtoonRecyclerView @JvmOverloads constructor(
 			return 0
 		}
 		when {
+			// Pages kept attached off-screen by the layout manager's extra space must not take the scroll,
+			// or the visible page gets moved mid-scroll and its neighbour sticks to the screen edge.
 			dy > 0 -> {
-				val child = getChildAt(0) as WebtoonFrameLayout
+				val first = (0 until childCount).firstOrNull { getChildAt(it).bottom > 0 } ?: return 0
+				val child = getChildAt(first) as WebtoonFrameLayout
 				var consumedByChild = child.dispatchVerticalScroll(dy)
 				if (consumedByChild < dy) {
-					if (childCount > 1) {
-						val nextChild = getChildAt(1) as WebtoonFrameLayout
-						val unconsumed =
-							dy - consumedByChild - nextChild.top //will be consumed by scroll
+					if (first + 1 < childCount) {
+						val nextChild = getChildAt(first + 1) as WebtoonFrameLayout
+						val scrollNeededToAlign = nextChild.top.coerceAtLeast(0)
+						val unconsumed = dy - consumedByChild - scrollNeededToAlign
 						if (unconsumed > 0) {
 							consumedByChild += nextChild.dispatchVerticalScroll(unconsumed)
 						}
 					}
 				}
-				return consumedByChild
+				return consumedByChild.coerceAtMost(dy)
 			}
 
 			dy < 0 -> {
-				val child = getChildAt(childCount - 1) as WebtoonFrameLayout
+				val last = (childCount - 1 downTo 0).firstOrNull { getChildAt(it).top < height } ?: return 0
+				val child = getChildAt(last) as WebtoonFrameLayout
 				var consumedByChild = child.dispatchVerticalScroll(dy)
 				if (consumedByChild > dy) {
-					if (childCount > 1) {
-						val nextChild = getChildAt(childCount - 2) as WebtoonFrameLayout
-						val unconsumed =
-							dy - consumedByChild + (height - nextChild.bottom) //will be consumed by scroll
+					if (last > 0) {
+						val nextChild = getChildAt(last - 1) as WebtoonFrameLayout
+						val scrollNeededToAlign = (height - nextChild.bottom).coerceAtLeast(0)
+						val unconsumed = dy - consumedByChild + scrollNeededToAlign
 						if (unconsumed < 0) {
 							consumedByChild += nextChild.dispatchVerticalScroll(unconsumed)
 						}
 					}
 				}
-				return consumedByChild
+				return consumedByChild.coerceAtLeast(dy)
 			}
 		}
 		return 0
@@ -215,26 +235,28 @@ class WebtoonRecyclerView @JvmOverloads constructor(
 		}
 
 		override fun onPull(deltaDistance: Float, displacement: Float) {
+			val threshold = maxOf(pullThreshold, 0.001f)
 			if (direction == DIRECTION_TOP) {
 				pullProgressTop = (pullProgressTop + deltaDistance).coerceAtLeast(0f)
-				pullListener.onPullProgressTop(pullProgressTop / pullThreshold)
+				pullListener.onPullProgressTop(pullProgressTop / threshold)
 			} else if (direction == DIRECTION_BOTTOM) {
 				pullProgressBottom = (pullProgressBottom + deltaDistance).coerceAtLeast(0f)
-				pullListener.onPullProgressBottom(pullProgressBottom / pullThreshold)
+				pullListener.onPullProgressBottom(pullProgressBottom / threshold)
 			}
 		}
 
 		override fun onRelease() {
 			var triggered = false
+			val threshold = maxOf(pullThreshold, 0.001f)
 			if (direction == DIRECTION_TOP) {
-				if (pullProgressTop >= pullThreshold) {
+				if (pullProgressTop >= threshold) {
 					pullListener.onPullTriggeredTop()
 					triggered = true
 				}
 				pullProgressTop = 0f
 				pullListener.onPullProgressTop(0f)
 			} else if (direction == DIRECTION_BOTTOM) {
-				if (pullProgressBottom >= pullThreshold) {
+				if (pullProgressBottom >= threshold) {
 					pullListener.onPullTriggeredBottom()
 					triggered = true
 				}

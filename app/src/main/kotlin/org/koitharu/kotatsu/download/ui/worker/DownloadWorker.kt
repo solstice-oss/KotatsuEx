@@ -63,6 +63,7 @@ import org.koitharu.kotatsu.core.util.ext.deleteWork
 import org.koitharu.kotatsu.core.util.ext.deleteWorks
 import org.koitharu.kotatsu.core.util.ext.ensureSuccess
 import org.koitharu.kotatsu.core.util.ext.getDisplayMessage
+import org.koitharu.kotatsu.core.util.ext.getQuantityStringSafe
 import org.koitharu.kotatsu.core.util.ext.getWorkInputData
 import org.koitharu.kotatsu.core.util.ext.getWorkSpec
 import org.koitharu.kotatsu.core.util.ext.openSource
@@ -79,7 +80,6 @@ import org.koitharu.kotatsu.local.data.LocalMangaRepository
 import org.koitharu.kotatsu.local.data.LocalStorageCache
 import org.koitharu.kotatsu.local.data.LocalStorageChanges
 import org.koitharu.kotatsu.local.data.PageCache
-import org.koitharu.kotatsu.local.data.TempFileFilter
 import org.koitharu.kotatsu.local.data.input.LocalMangaParser
 import org.koitharu.kotatsu.local.data.output.LocalMangaOutput
 import org.koitharu.kotatsu.local.domain.MangaLock
@@ -140,7 +140,12 @@ class DownloadWorker @AssistedInject constructor(
 			withContext(pausingHandle) {
 				downloadMangaImpl(manga, task, downloadedIds)
 			}
-			Result.success(currentState.toWorkData())
+			// Finished, but with chapters that failed on their own: Retry fetches just those
+			if (currentState.error != null) {
+				Result.failure(currentState.toWorkData())
+			} else {
+				Result.success(currentState.toWorkData())
+			}
 		} catch (_: CancellationException) {
 			withContext(NonCancellable) {
 				val notification = notificationFactory.create(currentState.copy(isStopped = true))
@@ -186,14 +191,14 @@ class DownloadWorker @AssistedInject constructor(
 		val chaptersToSkip = excludedIds.toMutableSet()
 		val pausingReceiver = PausingReceiver(id, PausingHandle.current())
 		mangaLock.withLock(manga) {
+			val destination = localMangaRepository.getOutputDir(manga, task.destination)
+			checkNotNull(destination) { applicationContext.getString(R.string.cannot_find_available_storage) }
 			ContextCompat.registerReceiver(
 				applicationContext,
 				pausingReceiver,
 				PausingReceiver.createIntentFilter(id),
 				ContextCompat.RECEIVER_NOT_EXPORTED,
 			)
-			val destination = localMangaRepository.getOutputDir(manga, task.destination)
-			checkNotNull(destination) { applicationContext.getString(R.string.cannot_find_available_storage) }
 			var output: LocalMangaOutput? = null
 			var isCompleted = false
 			try {
@@ -216,64 +221,27 @@ class DownloadWorker @AssistedInject constructor(
 					}
 				}
 				val chapters = getChapters(mangaDetails, task)
+				var failedChapters = 0
+				var chapterError: Exception? = null
 				for ((chapterIndex, chapter) in chapters.withIndex()) {
 					checkIsPaused()
 					if (chaptersToSkip.remove(chapter.value.id)) {
 						publishState(currentState.copy(downloadedChapters = currentState.downloadedChapters + 1))
 						continue
 					}
-					val pages = runFailsafe {
-						repo.getPages(mangaDetails, chapter.value)
-					} ?: continue
-					val pageCounter = AtomicInteger(0)
-					channelFlow {
-						val semaphore = Semaphore(MAX_PAGES_PARALLELISM)
-						for ((pageIndex, page) in pages.withIndex()) {
-							checkIsPaused()
-							launch {
-								semaphore.withPermit {
-									runFailsafe {
-										val url = repo.getPageUrl(page)
-										val file = cache[url]
-											?: downloadFile(url, destination, repo, page)
-										output.addPage(
-											chapter = chapter,
-											file = file,
-											pageNumber = pageIndex,
-											type = getMediaType(url, file),
-										)
-										if (file.extension == "tmp") {
-											file.deleteAwait()
-										}
-									}
-									send(pageIndex)
-								}
-							}
-						}
-					}.map {
-						DownloadProgress(
-							totalChapters = chapters.size,
-							currentChapter = chapterIndex,
-							totalPages = pages.size,
-							currentPage = pageCounter.getAndIncrement(),
-						)
-					}.withTicker(2L, TimeUnit.SECONDS).collect { progress ->
-						publishState(
-							currentState.copy(
-								totalChapters = progress.totalChapters,
-								currentChapter = progress.currentChapter,
-								totalPages = progress.totalPages,
-								currentPage = progress.currentPage,
-								isIndeterminate = false,
-								eta = etaEstimator.getEta(),
-								isStuck = etaEstimator.isStuck(),
-							),
-						)
-					}
-					if (output.flushChapter(chapter.value)) {
-						runCatchingCancellable {
-							localStorageChanges.emit(LocalMangaParser(output.rootFile).getManga(withDetails = false))
-						}.onFailure(Throwable::printStackTraceDebug)
+					try {
+						downloadChapter(output, destination, repo, mangaDetails, chapter, chapterIndex, chapters.size)
+					} catch (e: CancellationException) {
+						throw e
+					} catch (e: Exception) {
+						// Network errors were already offered for retry in runFailsafe. Anything else is
+						// the extension failing on this one chapter: like Mihon, only it is lost and the
+						// rest of the queue carries on.
+						e.printStackTraceDebug()
+						output.discardChapter(chapter.value)
+						failedChapters++
+						chapterError = e
+						continue
 					}
 					publishState(currentState.copy(downloadedChapters = currentState.downloadedChapters + 1))
 				}
@@ -282,8 +250,24 @@ class DownloadWorker @AssistedInject constructor(
 				output.finish()
 				val localManga = LocalMangaParser(output.rootFile).getManga(withDetails = false)
 				localStorageChanges.emit(localManga)
-				publishState(currentState.copy(localManga = localManga, eta = -1L, isStuck = false))
 				isCompleted = true
+				publishState(
+					if (chapterError != null) {
+						currentState.copy(
+							eta = -1L,
+							isStuck = false,
+							error = chapterError,
+							errorMessage = applicationContext.resources.getQuantityStringSafe(
+								R.plurals.download_chapters_failed,
+								failedChapters,
+								failedChapters,
+								chapterError.getDisplayMessage(applicationContext.resources),
+							),
+						)
+					} else {
+						currentState.copy(localManga = localManga, eta = -1L, isStuck = false)
+					},
+				)
 			} catch (e: Exception) {
 				if (e !is CancellationException) {
 					publishState(
@@ -296,7 +280,7 @@ class DownloadWorker @AssistedInject constructor(
 				throw e
 			} finally {
 				withContext(NonCancellable) {
-					applicationContext.unregisterReceiver(pausingReceiver)
+					runCatching { applicationContext.unregisterReceiver(pausingReceiver) }
 					// cleanup() may still write to the output (salvaging a partial archive), so it goes first.
 					// It can fail on its own now that finalizing reports a failed move instead of silently
 					// destroying the download, and that must not skip the closing and sweeping below.
@@ -307,11 +291,76 @@ class DownloadWorker @AssistedInject constructor(
 							localStorageChanges.emit(LocalMangaParser(output.rootFile).getManga(withDetails = false))
 						}.onFailure(Throwable::printStackTraceDebug)
 					}
-					destination.listFiles(TempFileFilter())?.forEach {
-						it.deleteAwait()
+					// Only this download's own page files: other downloads share the folder and their
+					// in-progress archives are .tmp files too, so a blanket sweep broke them mid-write.
+					destination.listFiles { f -> f.name.startsWith(tempFilePrefix) && f.name.endsWith(".tmp") }
+						?.forEach { it.deleteAwait() }
+				}
+			}
+		}
+	}
+
+	private suspend fun downloadChapter(
+		output: LocalMangaOutput,
+		destination: File,
+		repo: MangaRepository,
+		manga: Manga,
+		chapter: IndexedValue<MangaChapter>,
+		chapterIndex: Int,
+		chaptersCount: Int,
+	) {
+		val pages = runFailsafe {
+			repo.getPages(manga, chapter.value)
+		} ?: return
+		val pageCounter = AtomicInteger(0)
+		channelFlow {
+			val semaphore = Semaphore(MAX_PAGES_PARALLELISM)
+			for ((pageIndex, page) in pages.withIndex()) {
+				checkIsPaused()
+				launch {
+					semaphore.withPermit {
+						runFailsafe {
+							val url = repo.getPageUrl(page)
+							val file = cache[url]
+								?: downloadFile(url, destination, repo, page)
+							output.addPage(
+								chapter = chapter,
+								file = file,
+								pageNumber = pageIndex,
+								type = getMediaType(url, file),
+							)
+							if (file.extension == "tmp") {
+								file.deleteAwait()
+							}
+						}
+						send(pageIndex)
 					}
 				}
 			}
+		}.map {
+			DownloadProgress(
+				totalChapters = chaptersCount,
+				currentChapter = chapterIndex,
+				totalPages = pages.size,
+				currentPage = pageCounter.getAndIncrement(),
+			)
+		}.withTicker(2L, TimeUnit.SECONDS).collect { progress ->
+			publishState(
+				currentState.copy(
+					totalChapters = progress.totalChapters,
+					currentChapter = progress.currentChapter,
+					totalPages = progress.totalPages,
+					currentPage = progress.currentPage,
+					isIndeterminate = false,
+					eta = etaEstimator.getEta(),
+					isStuck = etaEstimator.isStuck(),
+				),
+			)
+		}
+		if (output.flushChapter(chapter.value)) {
+			runCatchingCancellable {
+				localStorageChanges.emit(LocalMangaParser(output.rootFile).getManga(withDetails = false))
+			}.onFailure(Throwable::printStackTraceDebug)
 		}
 	}
 
@@ -323,13 +372,18 @@ class DownloadWorker @AssistedInject constructor(
 		failsafe@ while (true) {
 			try {
 				return block()
-			} catch (e: IOException) {
+			} catch (e: CancellationException) {
+				throw e
+			} catch (e: Exception) {
 				val retryDelay = if (e is TooManyRequestExceptions) {
 					e.getRetryDelay()
 				} else {
 					DOWNLOAD_ERROR_DELAY
 				}
 				if (countDown <= 0 || retryDelay < 0 || retryDelay > MAX_RETRY_DELAY) {
+					if (e !is IOException) {
+						throw e // not a network error, so waiting won't fix it: fails just this chapter
+					}
 					val pausingHandle = PausingHandle.current()
 					if (pausingHandle.skipAllErrors()) {
 						return null
@@ -444,9 +498,12 @@ class DownloadWorker @AssistedInject constructor(
 		}
 	}
 
+	private val tempFilePrefix = "dl-$id-"
+
 	private fun File.createTempFile(ext: String?) = File(
 		this,
 		buildString {
+			append(tempFilePrefix)
 			append(UUID.randomUUID().toString())
 			if (!ext.isNullOrEmpty()) {
 				append('.')
@@ -558,6 +615,25 @@ class DownloadWorker @AssistedInject constructor(
 			workManager.deleteWork(id)
 		}
 
+		/** Runs a failed download again in its place. Chapters it already saved are skipped. */
+		suspend fun retry(id: UUID) {
+			val task = getTask(id) ?: return
+			workManager.enqueue(
+				createRequest(
+					DownloadTask(
+						mangaId = task.mangaId,
+						isPaused = false,
+						isSilent = task.isSilent,
+						chaptersIds = task.chaptersIds,
+						destination = task.destination,
+						format = task.format,
+						allowMeteredNetwork = task.allowMeteredNetwork,
+					),
+				),
+			).await()
+			workManager.deleteWork(id)
+		}
+
 		suspend fun delete(ids: Collection<UUID>) {
 			val wm = workManager
 			ids.forEach { id -> wm.cancelWorkById(id).await() }
@@ -592,17 +668,19 @@ class DownloadWorker @AssistedInject constructor(
 			}
 			val requests = tasks.map { (manga, task) ->
 				mangaDataRepository.storeManga(manga, replaceExisting = true)
-				OneTimeWorkRequestBuilder<DownloadWorker>()
-					.setConstraints(createConstraints(task.allowMeteredNetwork))
-					.addTag(TAG)
-					.keepResultsForAtLeast(30, TimeUnit.DAYS)
-					.setBackoffCriteria(BackoffPolicy.LINEAR, 10, TimeUnit.SECONDS)
-					.setInputData(task.toData())
-					.setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
-					.build()
+				createRequest(task)
 			}
 			workManager.enqueue(requests).await()
 		}
+
+		private fun createRequest(task: DownloadTask) = OneTimeWorkRequestBuilder<DownloadWorker>()
+			.setConstraints(createConstraints(task.allowMeteredNetwork))
+			.addTag(TAG)
+			.keepResultsForAtLeast(30, TimeUnit.DAYS)
+			.setBackoffCriteria(BackoffPolicy.LINEAR, 10, TimeUnit.SECONDS)
+			.setInputData(task.toData())
+			.setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+			.build()
 
 		private fun createConstraints(allowMeteredNetwork: Boolean) = Constraints.Builder()
 			.setRequiredNetworkType(if (allowMeteredNetwork) NetworkType.CONNECTED else NetworkType.UNMETERED)

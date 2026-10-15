@@ -364,7 +364,6 @@
     <string name="advanced">Avancé</string>
     <string name="zoom_out">Réduire</string>
     <string name="manga_list">Liste des mangas</string>
-    <string name="sources_catalog">Sources catalogue</string>
     <string name="frequency_every_day">Tous les jours</string>
     <string name="categories">Catégories</string>
     <string name="list_options">Options de liste</string>
@@ -391,7 +390,6 @@
     <string name="manual">Manuel</string>
     <string name="reader_optimize_summary">Réduire la qualité des pages hors écran pour utiliser moins de mémoire</string>
     <string name="enhanced_colors">mode couleur 32-bit</string>
-    <string name="disable_nsfw_summary">Désactiver les sources explicites et masquer les mangas pour adultes de la liste si possible</string>
     <string name="keep_screen_on_summary">Ne pas désactiver l\'écran pendant que vous lisez des mangas</string>
     <string name="state">État</string>
     <string name="last_successful_backup">Dernière sauvegarde réussie : %s</string>
@@ -493,7 +491,6 @@
     <string name="last_used">Dernière utilisation</string>
     <string name="missing_storage_permission">Il n\'y a aucune autorisation pour accéder aux mangas sur le stockage externe</string>
     <string name="pin_navigation_ui">Épingler l\'interface de navigation</string>
-    <string name="runs_on_app_start">S\'exécute au démarrage de l\'application</string>
     <string name="show_pages_thumbs_summary">Active l\'onglet \"Pages\" sur l\'écran de détails</string>
     <string name="webtoon_gaps">Séparateurs en mode webtoon</string>
     <string name="webtoon_gaps_summary">Afficher des espaces verticaux entre les pages en mode webtoon</string>

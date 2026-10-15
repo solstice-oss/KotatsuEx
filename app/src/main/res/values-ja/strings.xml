@@ -418,9 +418,7 @@
     <string name="content_type_hentai">ヘンタイ</string>
     <string name="content_type_comics">コミック</string>
     <string name="content_type_other">その他</string>
-    <string name="sources_catalog">ソースカタログ</string>
     <string name="no_manga_sources_found">お探しの漫画が見つかりませんでした</string>
-    <string name="disable_nsfw_summary">NSFWを無効化し、可能であれば成人向け漫画をリストから非表示にする</string>
     <string name="state_paused">ポーズ</string>
     <string name="reader_optimize">メモリ消費の削減(ベータ版)</string>
     <string name="error_multiple_genres_not_supported">このマンガソースでは、複数のジャンルによるフィルタリングはサポートされていません</string>
@@ -496,7 +494,6 @@
     <string name="delete_read_chapters_summary">ローカルストレージから既読のチャプターを削除して空き容量を増やす</string>
     <string name="delete_read_chapters_prompt">これにより、ローカルストレージから既読としてマークされた全てのチャプターが完全に削除されます。後で再ダウンロードすることは可能ですが、インポートされたチャプターは永久に失われる可能性があります。</string>
     <string name="delete_read_chapters_auto">既読のチャプターを自動的に削除する</string>
-    <string name="runs_on_app_start">kotatsuの起動時に実行</string>
     <string name="unread">未読</string>
     <string name="unsupported_source">このマンガソースはサポートされていません</string>
     <string name="show_pages_thumbs">サムネイルを表示</string>

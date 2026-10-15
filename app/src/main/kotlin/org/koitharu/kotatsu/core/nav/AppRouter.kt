@@ -28,6 +28,7 @@ import org.koitharu.kotatsu.browser.BrowserActivity
 import org.koitharu.kotatsu.browser.cloudflare.CloudFlareActivity
 import org.koitharu.kotatsu.core.exceptions.CloudFlareProtectedException
 import org.koitharu.kotatsu.core.image.CoilMemoryCacheKey
+import org.koitharu.kotatsu.core.logs.breadcrumb
 import org.koitharu.kotatsu.core.model.FavouriteCategory
 import org.koitharu.kotatsu.core.model.MangaSourceInfo
 import org.koitharu.kotatsu.core.model.MissingMangaSource
@@ -62,6 +63,7 @@ import org.koitharu.kotatsu.details.ui.scrobbling.ScrobblingInfoSheet
 import org.koitharu.kotatsu.download.ui.dialog.DownloadDialogFragment
 import org.koitharu.kotatsu.download.ui.list.DownloadsActivity
 import org.koitharu.kotatsu.favourites.ui.FavouritesActivity
+import org.koitharu.kotatsu.favourites.ui.categories.CategoriesSortSheet
 import org.koitharu.kotatsu.favourites.ui.categories.FavouriteCategoriesActivity
 import org.koitharu.kotatsu.favourites.ui.categories.edit.FavouritesCategoryEditActivity
 import org.koitharu.kotatsu.favourites.ui.categories.select.FavoriteDialog
@@ -141,7 +143,7 @@ class AppRouter private constructor(
                 message = context.getString(R.string.source_not_installed),
                 actions = listOf(
                     DialogAction(context.getString(R.string.extensions)) {
-                        openSourcesCatalog(isExternalOnly = true)
+                        openSourcesCatalog()
                     },
                 ),
                 dismissLabel = context.getString(R.string.close),
@@ -154,6 +156,7 @@ class AppRouter private constructor(
     fun openList(tag: MangaTag) = openList(tag.source, MangaListFilter(tags = setOf(tag)), null)
 
     fun openSearch(query: String, kind: SearchKind = SearchKind.SIMPLE) {
+        breadcrumb("Search") { "global $kind search \"$query\"" }
         startActivity(
             Intent(contextOrNull() ?: return, SearchActivity::class.java)
                 .putExtra(KEY_QUERY, query)
@@ -161,9 +164,13 @@ class AppRouter private constructor(
         )
     }
 
-    fun openSearch(source: MangaSource, query: String) = openList(source, MangaListFilter(query = query), null)
+    fun openSearch(source: MangaSource, query: String) {
+        breadcrumb("Search") { "${source.name} search \"$query\"" }
+        openList(source, MangaListFilter(query = query), null)
+    }
 
     fun openDetails(manga: Manga) {
+        breadcrumb("Open") { "details \"${manga.title}\" ${manga.source.name} id=${manga.id} url=${manga.url}" }
         val context = contextOrNull() ?: return
         val intent = detailsIntent(context, manga)
         startActivity(intent)
@@ -256,14 +263,10 @@ class AppRouter private constructor(
         startActivity(suggestionsIntent(contextOrNull() ?: return))
     }
 
-    fun openSourcesCatalog(
-        isExternalOnly: Boolean = false,
-        autoMigrate: Boolean = false,
-    ) {
+    fun openSourcesCatalog(autoMigrate: Boolean = false) {
         val context = contextOrNull() ?: return
         startActivity(
             Intent(context, SourcesCatalogActivity::class.java).apply {
-                putExtra(KEY_SOURCE_CATALOG_EXTERNAL_ONLY, isExternalOnly)
                 if (autoMigrate) putExtra(KEY_SOURCE_CATALOG_AUTO_MIGRATE, true)
             },
         )
@@ -565,6 +568,10 @@ class AppRouter private constructor(
         ListConfigBottomSheet().withArgs(1) {
             putParcelable(KEY_LIST_SECTION, section)
         }.showDistinct()
+    }
+
+    fun showCategoriesSortSheet() {
+        CategoriesSortSheet().showDistinct()
     }
 
     fun showListSortSheet(section: ListConfigSection) {
@@ -935,7 +942,6 @@ class AppRouter private constructor(
         const val KEY_QUERY = "query"
         const val KEY_READER_MODE = "reader_mode"
         const val KEY_SORT_ORDER = "sort_order"
-        const val KEY_SOURCE_CATALOG_EXTERNAL_ONLY = "source_catalog_external_only"
         const val KEY_SOURCE_CATALOG_AUTO_MIGRATE = "source_catalog_auto_migrate"
         const val KEY_SOURCE = "source"
         const val KEY_SCROLL_TO_LANGUAGE = "scroll_to_language"

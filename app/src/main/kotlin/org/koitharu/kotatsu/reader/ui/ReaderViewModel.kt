@@ -11,11 +11,13 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
@@ -25,12 +27,16 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.bookmarks.domain.Bookmark
 import org.koitharu.kotatsu.bookmarks.domain.BookmarksRepository
 import org.koitharu.kotatsu.core.exceptions.EmptyMangaException
 import org.koitharu.kotatsu.core.model.getPreferredBranch
+import org.koitharu.kotatsu.core.logs.breadcrumb
 import org.koitharu.kotatsu.core.nav.MangaIntent
 import org.koitharu.kotatsu.core.nav.ReaderIntent
 import org.koitharu.kotatsu.core.os.AppShortcutManager
@@ -45,6 +51,8 @@ import org.koitharu.kotatsu.core.util.ext.MutableEventFlow
 import org.koitharu.kotatsu.core.util.ext.call
 import org.koitharu.kotatsu.core.util.ext.firstNotNull
 import org.koitharu.kotatsu.core.util.ext.isHttpUrl
+import org.koitharu.kotatsu.core.util.ext.printStackTraceDebug
+import org.koitharu.kotatsu.core.util.ext.processLifecycleScope
 import org.koitharu.kotatsu.core.util.ext.requireValue
 import org.koitharu.kotatsu.details.data.MangaDetails
 import org.koitharu.kotatsu.details.domain.DetailsInteractor
@@ -59,11 +67,13 @@ import org.koitharu.kotatsu.list.domain.ReadingProgress.Companion.PROGRESS_NONE
 import org.koitharu.kotatsu.local.data.LocalStorageChanges
 import org.koitharu.kotatsu.local.data.isEpub
 import org.koitharu.kotatsu.local.domain.DeleteLocalMangaUseCase
+import org.koitharu.kotatsu.local.domain.DeleteReadChaptersUseCase
 import org.koitharu.kotatsu.local.domain.model.LocalManga
 import org.koitharu.kotatsu.parsers.model.ContentRating
 import org.koitharu.kotatsu.parsers.model.Manga
 import org.koitharu.kotatsu.parsers.model.MangaPage
 import org.koitharu.kotatsu.parsers.util.ifNullOrEmpty
+import org.koitharu.kotatsu.parsers.util.mapToSet
 import org.koitharu.kotatsu.parsers.util.runCatchingCancellable
 import org.koitharu.kotatsu.parsers.util.sizeOrZero
 import org.koitharu.kotatsu.reader.domain.ChaptersLoader
@@ -80,6 +90,7 @@ import javax.inject.Inject
 private const val BOUNDS_PAGE_OFFSET = 2
 private const val PREFETCH_LIMIT = 10
 private const val EPUB_SLIDER_MAX = 1000
+private const val AUTOSAVE_INTERVAL_MS = 5000L
 
 @HiltViewModel
 class ReaderViewModel @Inject constructor(
@@ -96,6 +107,7 @@ class ReaderViewModel @Inject constructor(
     private val detectReaderModeUseCase: DetectReaderModeUseCase,
     private val statsCollector: StatsCollector,
     private val discordRpc: DiscordRpc,
+    private val deleteReadChaptersUseCase: DeleteReadChaptersUseCase,
     @LocalStorageChanges localStorageChanges: SharedFlow<LocalManga?>,
     interactor: DetailsInteractor,
     deleteLocalMangaUseCase: DeleteLocalMangaUseCase,
@@ -119,6 +131,16 @@ class ReaderViewModel @Inject constructor(
     private var pageSaveJob: Job? = null
     private var bookmarkJob: Job? = null
     private var stateChangeJob: Job? = null
+    private var autoSaveJob: Job? = null
+
+    // Chapter of the last history write, so an autosave knows whether trackers must hear about it
+    @Volatile
+    private var savedChapterId = 0L
+
+    // Runs the read-chapters cleanup one pass at a time and remembers what it deleted, since the
+    // reader's copy of the download only catches up once the deletion has been announced
+    private val readChaptersCleanupLock = Mutex()
+    private val deletedChapterIds = HashSet<Long>()
 
     init {
         mangaDetails.value = intent.manga?.let { MangaDetails(it) }
@@ -138,6 +160,9 @@ class ReaderViewModel @Inject constructor(
 
     // Peek mode: the reader works as usual but never writes reading progress (history) —
     // used when the user just looks into a chapter away from their current position.
+    /** Novels: the dock's highlight button armed - the next tapped sentence becomes a highlight. */
+    val isHighlightPicking = MutableStateFlow(false)
+
     val isPeekMode = MutableStateFlow(savedStateHandle.get<Boolean>(ReaderIntent.EXTRA_PEEK) == true)
 
     val content = MutableStateFlow(ReaderContent(emptyList(), null))
@@ -221,6 +246,20 @@ class ReaderViewModel @Inject constructor(
                 appShortcutManager.notifyMangaOpened(mangaId)
             }
         }
+        launchJob(Dispatchers.Default) {
+            combine(
+                readingState.mapNotNull { it?.chapterId }.distinctUntilChanged(),
+                mangaDetails.map { it?.local }.distinctUntilChanged(),
+                isIncognitoMode,
+            ) { _, _, _ -> }.collect {
+                deleteReadChapters(isClosing = false)
+            }
+        }
+    }
+
+    override fun onCleared() {
+        deleteReadChapters(isClosing = true)
+        super.onCleared()
     }
 
     override fun reload() {
@@ -257,6 +296,7 @@ class ReaderViewModel @Inject constructor(
     }
 
     fun saveCurrentState(state: ReaderState? = null) {
+        autoSaveJob?.cancel() // this save is the newer, exact one
         if (state != null) {
             readingState.value = state
             savedStateHandle[ReaderIntent.EXTRA_STATE] = state
@@ -265,6 +305,7 @@ class ReaderViewModel @Inject constructor(
             return
         }
         val readerState = state ?: readingState.value ?: return
+        savedChapterId = readerState.chapterId
         historyUpdateUseCase.invokeAsync(
             manga = getMangaOrNull() ?: return,
             readerState = readerState,
@@ -369,10 +410,19 @@ class ReaderViewModel @Inject constructor(
                 return@launchJob // TODO
             }
             val centerPos = (lowerPos + upperPos) / 2
+            val prevState = readingState.value
             pages.getOrNull(centerPos)?.let { page ->
                 readingState.update { cs ->
-                    cs?.copy(chapterId = page.chapterId, page = page.index)
+                    if (cs == null || cs.chapterId == page.chapterId && cs.page == page.index) {
+                        cs
+                    } else {
+                        // the scroll offset belonged to the previous page
+                        cs.copy(chapterId = page.chapterId, page = page.index, scroll = 0)
+                    }
                 }
+            }
+            if (readingState.value != prevState) {
+                scheduleAutoSave()
             }
             notifyStateChanged()
             if (pages.isEmpty() || loadingJob?.isActive == true) {
@@ -453,6 +503,7 @@ class ReaderViewModel @Inject constructor(
         loadingJob = launchLoadingJob(Dispatchers.Default + EventExceptionHandler(onLoadingError)) {
             var exception: Exception? = null
             var loadedDetails: MangaDetails? = null
+            var isChapterEmpty = false
             try {
                 detailsLoadUseCase(intent, force = false, canUseStored = ::isStoredCopyEnough)
                     .collect { details ->
@@ -464,6 +515,7 @@ class ReaderViewModel @Inject constructor(
                         val manga = details.toManga()
                         // obtain state
                         if (readingState.value == null) {
+                            isChapterEmpty = false // only the latest attempt's outcome counts
                             val newState = getStateFromIntent(manga, details.isLoaded)
                             if (newState == null) {
                                 return@collect // manga not loaded yet if cannot get state
@@ -477,6 +529,8 @@ class ReaderViewModel @Inject constructor(
                             readerMode.value = mode
                             try {
                                 if (!chaptersLoader.loadSingleChapter(newState.chapterId)) {
+                                    // The source answered without error but with zero pages
+                                    isChapterEmpty = true
                                     readingState.value = null
                                     return@collect
                                 }
@@ -493,6 +547,7 @@ class ReaderViewModel @Inject constructor(
                             readingState.value?.let {
                                 val percent = computePercent(it)
                                 historyUpdateUseCase(manga, it, percent)
+                                savedChapterId = it.chapterId
                             }
                         }
                         notifyStateChanged()
@@ -508,23 +563,18 @@ class ReaderViewModel @Inject constructor(
                 if (loadedManga != null) {
                     mangaDetails.value = loadedManga.filterChapters(selectedBranch.value)
                 }
-                val loadingError = when {
-                    exception != null -> exception
-                    loadedManga == null || !loadedManga.isLoaded -> null
-                    loadedManga.isRestricted -> EmptyMangaException(
-                        EmptyMangaReason.RESTRICTED,
-                        loadedManga.toManga(),
-                        null,
-                    )
-
-                    loadedManga.allChapters.isEmpty() -> EmptyMangaException(
-                        EmptyMangaReason.NO_CHAPTERS,
-                        loadedManga.toManga(),
-                        null,
-                    )
-
-                    else -> null
-                } ?: IllegalStateException("Unable to load manga. This should never happen. Please report")
+                // loadedManga is only null when the details flow emitted nothing, which it never does
+                // without throwing; the generic "An error occurred" covers that
+                val loadingError = exception ?: loadedManga?.let { details ->
+                    val reason = when {
+                        isChapterEmpty -> EmptyMangaReason.NO_PAGES
+                        !details.isLoaded -> EmptyMangaReason.LOADING_ERROR
+                        details.isRestricted -> EmptyMangaReason.RESTRICTED
+                        details.allChapters.isEmpty() -> EmptyMangaReason.NO_CHAPTERS
+                        else -> EmptyMangaReason.LOADING_ERROR
+                    }
+                    EmptyMangaException(reason, details.toManga(), null)
+                } ?: IllegalStateException()
                 onLoadingError.call(loadingError)
             } else exception?.let { e ->
                 // manga has been loaded but error occurred
@@ -557,8 +607,8 @@ class ReaderViewModel @Inject constructor(
     }
 
     private fun <T> List<T>.trySublist(fromIndex: Int, toIndex: Int): List<T> {
-        val fromIndexBounded = fromIndex.coerceAtMost(lastIndex)
-        val toIndexBounded = toIndex.coerceIn(fromIndexBounded, lastIndex)
+        val fromIndexBounded = fromIndex.coerceIn(0, size)
+        val toIndexBounded = toIndex.coerceIn(fromIndexBounded, size)
         return if (fromIndexBounded == toIndexBounded) {
             emptyList()
         } else {
@@ -576,6 +626,7 @@ class ReaderViewModel @Inject constructor(
         // Chapter buttons update readingState before the EPUB surface reports its position. The
         // toolbar is UI state, so compare against that instead of the already-updated reader state.
         val chapterChanged = uiState.value?.chapter?.id != chapterId
+        val prevState = readingState.value
         readingState.update {
             it?.copy(
                 chapterId = chapterId,
@@ -583,11 +634,85 @@ class ReaderViewModel @Inject constructor(
                 scroll = ReaderState.encodeEpubOffset(charOffset),
             )
         }
+        if (readingState.value != prevState) {
+            scheduleAutoSave()
+        }
         updateEpubProgressUi(chapterPm, page, pageCount)
         if (chapterChanged) {
             launchJob(Dispatchers.Default) {
                 notifyStateChanged()
                 updateEpubProgressUi(chapterPm, page, pageCount)
+            }
+        }
+    }
+
+    /**
+     * Writes the position while reading instead of only on pause or idle: scrolling keeps resetting
+     * the idle timer, and TTS or auto-scroll move on without any touch. A new chapter is written at
+     * once and reaches the trackers; within a chapter only the position on the history entry is
+     * updated (no manga/feed rewrite, so other screens don't reload), at most every
+     * [AUTOSAVE_INTERVAL_MS]. The pause and idle saves still write the exact view state.
+     */
+    @AnyThread
+    private fun scheduleAutoSave() {
+        val chapterId = readingState.value?.chapterId ?: return
+        val isNewChapter = chapterId != savedChapterId
+        if (isNewChapter) {
+            savedChapterId = chapterId // claimed now so the next progress reports don't repeat it
+            autoSaveJob?.cancel()
+        } else if (autoSaveJob?.isActive == true) {
+            return // the pending save picks up the latest position when it fires
+        }
+        autoSaveJob = launchJob(Dispatchers.Default) {
+            if (!isNewChapter) {
+                delay(AUTOSAVE_INTERVAL_MS)
+            }
+            if (isIncognitoMode.value != false || isPeekMode.value) {
+                return@launchJob
+            }
+            val manga = getMangaOrNull() ?: return@launchJob
+            val state = readingState.value ?: return@launchJob
+            runCatchingCancellable {
+                if (isNewChapter) {
+                    historyUpdateUseCase(manga, state, computePercent(state))
+                } else {
+                    historyRepository.updatePosition(manga, state.chapterId, state.page, state.scroll, computePercent(state))
+                }
+            }.onFailure {
+                it.printStackTraceDebug()
+            }
+        }
+    }
+
+    /**
+     * Automatic cleanup of read chapters, run as you move between chapters and once more when the
+     * reader closes. Chapters the reader still has loaded wait for that last pass, and so does a
+     * download kept as a single file: cleaning it rewrites the file the reader is reading from.
+     */
+    private fun deleteReadChapters(isClosing: Boolean) {
+        if (!settings.isAutoLocalChaptersCleanupEnabled || isIncognitoMode.value != false || isPeekMode.value) {
+            return
+        }
+        // Outlives the reader, so neither the last pass nor one cut short by closing it is lost
+        processLifecycleScope.launch(Dispatchers.Default) {
+            readChaptersCleanupLock.withLock {
+                val details = mangaDetails.value ?: return@withLock
+                val local = details.local?.takeIf { isClosing || it.file.isDirectory } ?: return@withLock
+                val chapterId = readingState.value?.chapterId ?: return@withLock
+                val inUse = if (isClosing) emptySet() else chaptersLoader.snapshot().mapToSet { it.chapterId }
+                runCatchingCancellable {
+                    deleteReadChaptersUseCase.deleteBehind(
+                        localManga = local,
+                        chapters = details.allChapters,
+                        currentChapterId = chapterId,
+                        exclude = inUse + deletedChapterIds,
+                    )
+                }.onSuccess { ids ->
+                    deletedChapterIds += ids
+                    chaptersLoader.onDownloadsDeleted(ids)
+                }.onFailure {
+                    it.printStackTraceDebug()
+                }
             }
         }
     }
@@ -723,14 +848,14 @@ class ReaderViewModel @Inject constructor(
         // A referenced chapter can be missing from the pre-refresh database snapshot (isLoaded ==
         // false) — return null and wait for the refreshed emission. Once the source list is loaded,
         // a still-missing chapter means the source really dropped it (scanlator removed, url
-        // changed): fall through to the next strategy instead of failing the whole reader with
-        // "Unable to load manga. This should never happen".
+        // changed): fall through to the next strategy instead of failing the whole reader.
 
         // specific state is requested
         val requestedState: ReaderState? = savedStateHandle[ReaderIntent.EXTRA_STATE]
         if (requestedState != null) {
             when {
-                manga.findChapterById(requestedState.chapterId) != null -> return requestedState
+                manga.findChapterById(requestedState.chapterId) != null ->
+                    return requestedState.logChosen(manga, isLoaded, "intent extra")
                 !isLoaded -> return null
             }
         }
@@ -744,18 +869,27 @@ class ReaderViewModel @Inject constructor(
                 chapter == null -> if (!isLoaded) return null
                 // specified branch is requested
                 ReaderIntent.EXTRA_BRANCH in savedStateHandle -> return if (chapter.branch == requestedBranch) {
-                    ReaderState(history)
+                    ReaderState(history).logChosen(manga, isLoaded, "history")
                 } else {
-                    ReaderState(manga, requestedBranch)
+                    ReaderState(manga, requestedBranch).logChosen(manga, isLoaded, "start of branch $requestedBranch")
                 }
 
-                else -> return ReaderState(history)
+                else -> return ReaderState(history).logChosen(manga, isLoaded, "history")
             }
         }
 
         // start from beginning
         val preferredBranch = requestedBranch ?: manga.getPreferredBranch(null)
-        return ReaderState(manga, preferredBranch)
+        return ReaderState(manga, preferredBranch).logChosen(manga, isLoaded, "start of manga")
+    }
+
+    private fun ReaderState.logChosen(manga: Manga, isLoaded: Boolean, origin: String) = also {
+        breadcrumb("Reader") {
+            val chapter = manga.findChapterById(chapterId)
+            "open \"${manga.title}\" ${manga.source.name} id=${manga.id} url=${manga.url}: chapter id=$chapterId " +
+                "url=${chapter?.url} number=${chapter?.number} page=$page, from $origin " +
+                "(details: ${if (isLoaded) "loaded" else "stored snapshot"})"
+        }
     }
 
     private fun Exception.mergeWith(other: Exception?): Exception = if (other == null) {

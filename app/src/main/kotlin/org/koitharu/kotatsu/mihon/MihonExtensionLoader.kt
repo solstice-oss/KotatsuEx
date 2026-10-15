@@ -18,6 +18,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+import org.koitharu.kotatsu.core.logs.AppLogger
+import org.koitharu.kotatsu.core.logs.breadcrumb
 import org.koitharu.kotatsu.mihon.compat.KotoInjektBridge
 import org.koitharu.kotatsu.mihon.model.MihonExtensionInfo
 import org.koitharu.kotatsu.mihon.model.MihonLoadResult
@@ -26,6 +28,7 @@ import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
+import org.koitharu.kotatsu.core.model.ContentWarning
 
 @Singleton
 class MihonExtensionLoader @Inject constructor(
@@ -266,8 +269,19 @@ class MihonExtensionLoader @Inject constructor(
 		private const val TSUNDOKU_CLASS_PREFIX = "app.tsundoku.extension."
 		private const val MIHON_CLASS_PREFIX = "eu.kanade.tachiyomi.extension."
 
-		internal fun readNsfwFlag(metaData: Bundle): Boolean {
-			if (metaData.getInt(METADATA_CONTENT_WARNING, 0) > 0) return true
+		/** Newer extensions declare a [ContentWarning] (1 = mixed, 2 = 18+); older ones only an nsfw flag. */
+		internal fun readContentWarning(metaData: Bundle): ContentWarning {
+			if (metaData.containsKey(METADATA_CONTENT_WARNING)) {
+				return when (metaData.getInt(METADATA_CONTENT_WARNING, 0)) {
+					1 -> ContentWarning.MIXED
+					2 -> ContentWarning.NSFW
+					else -> ContentWarning.SAFE
+				}
+			}
+			return if (readNsfwFlag(metaData)) ContentWarning.NSFW else ContentWarning.SAFE
+		}
+
+		private fun readNsfwFlag(metaData: Bundle): Boolean {
 			val key = METADATA_NSFW_KEYS.firstOrNull { metaData.containsKey(it) } ?: return false
 			return runCatching {
 				parseNsfwFlag(metaData.getInt(key))
@@ -289,6 +303,16 @@ class MihonExtensionLoader @Inject constructor(
 			}
 		}
 
+		/**
+		 * Only a real Double from the manifest is used; anything else (manifest decimals are always
+		 * Float) falls back to the version name, which is what getDouble's 0.0 default did before.
+		 * Never widen the Float: 1.4f.toDouble() is 1.39999…, outside the supported range.
+		 */
+		internal fun parseLibVersion(metaValue: Any?, versionName: String): Double? =
+			(metaValue as? Double)?.takeUnless { it == 0.0 }
+				?: versionName.substringBeforeLast('.').toDoubleOrNull()
+				?: versionName.split('.').take(2).joinToString(".").toDoubleOrNull()
+
 		internal fun isSupportedLibVersion(libVersion: Double): Boolean {
 			return libVersion in LIB_VERSION_MIN..LIB_VERSION_MAX
 		}
@@ -296,6 +320,7 @@ class MihonExtensionLoader @Inject constructor(
 
 	suspend fun loadExtensions(context: Context, privateMode: Boolean = false): List<MihonLoadResult> = withContext(Dispatchers.IO) {
 		injektBridge.get().initialize()
+		val previous = if (AppLogger.isRecording) loadedExtensions.mapValues { it.value.result } else emptyMap()
 		val results = if (privateMode) {
 			loadPrivateExtensions(context)
 		} else {
@@ -307,6 +332,11 @@ class MihonExtensionLoader @Inject constructor(
 		// Forget uninstalled (or now failing) extensions so their class loaders can be collected.
 		val loaded = results.mapNotNullTo(HashSet()) { (it as? MihonLoadResult.Success)?.pkgName }
 		loadedExtensions.keys.retainAll(loaded)
+		breadcrumb(TAG) {
+			val reused = results.count { it is MihonLoadResult.Success && previous[it.pkgName] === it }
+			"Extensions loaded (${if (privateMode) "private" else "installed"}): ${loaded.size} ok " +
+				"($reused reused, ${loaded.size - reused} new), ${results.size - loaded.size} failed"
+		}
 		results
 	}
 
@@ -398,7 +428,7 @@ class MihonExtensionLoader @Inject constructor(
 			versionName = versionName,
 			libVersion = libVersion,
 			lang = lang,
-			isNsfw = readNsfwFlag(metaData),
+			contentWarning = readContentWarning(metaData),
 			sourceClassName = sourceClassName,
 			apkPath = appInfo.sourceDir ?: return null,
 			signatures = getSignatures(pkgInfo),
@@ -466,7 +496,7 @@ class MihonExtensionLoader @Inject constructor(
 		if (sources.isEmpty()) {
 			return buildLoggedError(pkgInfo.packageName, "No sources loaded")
 		}
-		logLoadedSources(pkgInfo.packageName, sources)
+		logLoadedSources(pkgInfo.packageName, versionName, sources)
 		return MihonLoadResult.Success(
 			pkgName = pkgInfo.packageName,
 			appName = appName,
@@ -483,7 +513,7 @@ class MihonExtensionLoader @Inject constructor(
 					else -> "all"
 				}
 			},
-			isNsfw = readNsfwFlag(metaData),
+			contentWarning = readContentWarning(metaData),
 			sources = sources,
 			isShared = isShared,
 		).also { loadedExtensions[pkgInfo.packageName] = LoadedExtension(appInfo.sourceDir, it) }
@@ -538,27 +568,24 @@ class MihonExtensionLoader @Inject constructor(
 		return MihonLoadResult.Error(pkgName, message, exception)
 	}
 
-	private fun logLoadedSources(pkgName: String, sources: List<Source>) {
+	// Only while recording: one line per newly instantiated extension (source ids help with mix-ups).
+	private fun logLoadedSources(pkgName: String, versionName: String, sources: List<Source>) = breadcrumb(TAG) {
 		val summary = sources.joinToString(separator = " | ") { source ->
 			when (source) {
 				is CatalogueSource -> "id=${source.id},name=${source.name},lang=${source.lang},class=${source.javaClass.name}"
 				else -> "id=${source.id},class=${source.javaClass.name}"
 			}
 		}
-		Log.i(TAG, "Loaded extension $pkgName with ${sources.size} source(s): $summary")
+		"Loaded extension $pkgName v$versionName with ${sources.size} source(s): $summary"
 	}
 
 	private fun isPackageAnExtension(pkgInfo: PackageInfo): Boolean = isPackageAnExtensionStatic(pkgInfo)
 
-	private fun parseLibVersion(versionName: String): Double? {
-		return versionName.substringBeforeLast('.').toDoubleOrNull()
-			?: versionName.split('.').take(2).joinToString(".").toDoubleOrNull()
-	}
-
+	// Untyped read: getDouble on the Float that manifests always produce logs a warning plus a stack trace
+	// per call, which flooded logcat (once per extension per scan).
+	@Suppress("DEPRECATION")
 	private fun readLibVersion(metaData: Bundle, versionName: String): Double? =
-		metaData.getDouble(METADATA_EXTENSION_LIB, 0.0)
-			.takeUnless { it == 0.0 }
-			?: parseLibVersion(versionName)
+		parseLibVersion(metaData.get(METADATA_EXTENSION_LIB), versionName)
 
 	private fun extractLanguage(packageName: String): String {
 		val parts = packageName.split('.')

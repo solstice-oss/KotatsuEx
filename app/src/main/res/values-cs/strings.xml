@@ -388,9 +388,7 @@
     <string name="last_successful_backup">Poslední úspěšná záloha: %s</string>
     <string name="lock_screen_rotation">Uzamknout otáčení obrazovky</string>
     <string name="content_type_other">Jiné</string>
-    <string name="sources_catalog">Katalog zdrojů</string>
     <string name="manual">Ručně</string>
-    <string name="disable_nsfw_summary">Zakázat NSFW zdroje a skrýt mangy pro dospělé ze seznamu, je-li to možné</string>
     <string name="error_multiple_genres_not_supported">Filtrování podle více žánrů tento zdroj mang nepodporuje</string>
     <string name="error_multiple_states_not_supported">Filtrování podle více stavů tento zdroj mang nepodporuje</string>
     <string name="error_search_not_supported">Hledání není v tomto zdroji mang podporovaný</string>
@@ -497,7 +495,6 @@
     <string name="no_chapters_deleted">Nebyly odstraněny žádné kapitoly</string>
     <string name="chapters_deleted_pattern">Odstraněn %1$s, smazán %2$s</string>
     <string name="delete_read_chapters_auto">Odstraňovat přečtené kapitoly automaticky</string>
-    <string name="runs_on_app_start">Spouští se při spuštění aplikace</string>
     <string name="webtoon_gaps">Mezery v režimu webtoon</string>
     <string name="webtoon_gaps_summary">Zobrazit svislé mezery mezi stránkami v režimu webtoon</string>
     <string name="location">Umístění</string>

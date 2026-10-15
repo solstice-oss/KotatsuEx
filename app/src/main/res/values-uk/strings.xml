@@ -405,13 +405,11 @@
     <string name="last_successful_backup">Останнє успішне резервне копіювання: %s</string>
     <string name="backups_output_directory">Вихідний каталог резервних копій</string>
     <string name="lock_screen_rotation">Блокування повороту екрану</string>
-    <string name="sources_catalog">Каталог джерел</string>
     <string name="content_type_manga">Манґа</string>
     <string name="content_type_hentai">Хентай</string>
     <string name="content_type_comics">Комікси</string>
     <string name="no_manga_sources_found">За вашим запитом не знайдено доступних джерел манґи</string>
     <string name="manual">Вручну</string>
-    <string name="disable_nsfw_summary">Вимкніть джерела NSFW і приховайте манґу для дорослих зі списку, якщо можливо</string>
     <string name="content_type_other">Інший</string>
     <string name="state_paused">Призупинено</string>
     <string name="error_multiple_states_not_supported">Фільтрування за кількома станами не підтримується цим джерелом манґи</string>
@@ -511,7 +509,6 @@
     <string name="order_oldest">Найстаріша</string>
     <string name="long_ago_read">Давно прочитана</string>
     <string name="unread">Непрочитана</string>
-    <string name="runs_on_app_start">Запускається під час запуску застосунка</string>
     <string name="delete_read_chapters_auto">Автоматично видаляти прочитані розділи</string>
     <string name="delete_read_chapters_prompt">Це призведе до остаточного видалення всіх розділів, позначених як прочитані, з вашого локального сховища. Ви можете завантажити їх пізніше, але імпортовані розділи можуть бути втрачені назавжди</string>
     <string name="unsupported_source">Це джерело манґи не підтримується</string>

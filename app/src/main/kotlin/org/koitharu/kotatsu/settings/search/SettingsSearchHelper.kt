@@ -90,6 +90,7 @@ class SettingsSearchHelper @Inject constructor(
 				addItem(AppSettings.KEY_LIST_CHECKPOINT, R.string.list_checkpoint_settings, R.string.list_checkpoint_settings_summary, crumbs, AppearanceSettingsFragment::class.java)
 				addItem(AppSettings.KEY_PROGRESS_INDICATORS, R.string.show_reading_indicators, breadcrumbs = crumbs, fragmentClass = AppearanceSettingsFragment::class.java)
 				addItem(AppSettings.KEY_MANGA_LIST_BADGES, R.string.badges_in_lists, breadcrumbs = crumbs, fragmentClass = AppearanceSettingsFragment::class.java, keywordArrayRes = intArrayOf(R.array.list_badges))
+				addItem("manage_categories_nav", R.string.manage_categories, breadcrumbs = crumbs, fragmentClass = AppearanceSettingsFragment::class.java, keywordRes = intArrayOf(R.string.categories, R.string.favourites))
 			}
 			group(sectionCrumbs, ctx.getString(R.string.details)) { crumbs ->
 				addItem(AppSettings.KEY_COLLAPSE_DESCRIPTION, R.string.collapse_long_description, breadcrumbs = crumbs, fragmentClass = AppearanceSettingsFragment::class.java)
@@ -142,7 +143,7 @@ class SettingsSearchHelper @Inject constructor(
 			}
 			group(sectionCrumbs, "Catalog") { crumbs ->
 				addItem("sources_catalog", R.string.manage_extensions, R.string.manage_extensions_summary, crumbs, ExtensionsSettingsFragment::class.java)
-				addItem("extension_stores", R.string.manage_stores, R.string.manage_stores_summary, crumbs, ExtensionsSettingsFragment::class.java)
+				addItem("extension_stores", R.string.extension_stores, R.string.manage_stores_summary, crumbs, ExtensionsSettingsFragment::class.java)
 				addItem("migrate_broken_sources", R.string.migrate_broken_sources, R.string.migrate_broken_sources_summary, crumbs, ExtensionsSettingsFragment::class.java)
 				addItem(AppSettings.KEY_PRIVATE_INSTALLER, R.string.private_extensions, R.string.private_extensions_summary, crumbs, ExtensionsSettingsFragment::class.java)
 			}
@@ -152,7 +153,7 @@ class SettingsSearchHelper @Inject constructor(
 			}
 			group(sectionCrumbs, ctx.getString(R.string.filter)) { crumbs ->
 				addItem(AppSettings.KEY_DEFAULT_BROWSE_SORT, R.string.extensions_default_sort, R.string.extensions_default_sort_summary, crumbs, ExtensionsSettingsFragment::class.java)
-				addItem(AppSettings.KEY_DISABLE_NSFW, R.string.disable_nsfw, R.string.disable_nsfw_summary, crumbs, ExtensionsSettingsFragment::class.java)
+				addItem(AppSettings.KEY_CONTENT_FILTER, R.string.show_extensions, breadcrumbs = crumbs, fragmentClass = ExtensionsSettingsFragment::class.java, keywordRes = intArrayOf(R.string.nsfw_filter, R.string.disable_nsfw, R.string.sfw, R.string.content_warning_mixed, R.string.nsfw))
 				addItem(AppSettings.KEY_INCOGNITO_NSFW, R.string.incognito_for_nsfw, breadcrumbs = crumbs, fragmentClass = ExtensionsSettingsFragment::class.java, keywordArrayRes = intArrayOf(R.array.incognito_nsfw_options))
 			}
 		}
@@ -185,6 +186,8 @@ class SettingsSearchHelper @Inject constructor(
 				addItem(AppSettings.KEY_READER_OPTIMIZE, R.string.reader_optimize, R.string.reader_optimize_summary, crumbs, ReaderSettingsFragment::class.java)
 				addItem(AppSettings.KEY_READER_UPSCALE, R.string.reader_upscale, R.string.reader_upscale_summary, crumbs, ReaderSettingsFragment::class.java)
 				addItem(AppSettings.KEY_READER_CROP, R.string.crop_pages, breadcrumbs = crumbs, fragmentClass = ReaderSettingsFragment::class.java, keywordArrayRes = intArrayOf(R.array.reader_crop))
+				addItem(AppSettings.KEY_READER_ROTATE_WIDE, R.string.rotate_wide_pages, R.string.rotate_wide_pages_summary, crumbs, ReaderSettingsFragment::class.java)
+				addItem(AppSettings.KEY_READER_ROTATE_WIDE_INVERT, R.string.rotate_wide_pages_invert, R.string.rotate_wide_pages_invert_summary, crumbs, ReaderSettingsFragment::class.java)
 			}
 			group(sectionCrumbs, "Display") { crumbs ->
 				addItem(AppSettings.KEY_READER_FULLSCREEN, R.string.fullscreen_mode, R.string.reader_fullscreen_summary, crumbs, ReaderSettingsFragment::class.java)
@@ -214,7 +217,7 @@ class SettingsSearchHelper @Inject constructor(
 				addItem(AppSettings.KEY_COOKIES_CLEAR, R.string.clear_cookies, R.string.clear_cookies_summary, crumbs + ctx.getString(R.string.data_removal), DataCleanupSettingsFragment::class.java)
 				addItem(AppSettings.KEY_WEBVIEW_CLEAR, R.string.clear_browser_data, R.string.clear_browser_data_summary, crumbs + ctx.getString(R.string.data_removal), DataCleanupSettingsFragment::class.java)
 				addItem(AppSettings.KEY_CHAPTERS_CLEAR, R.string.delete_read_chapters, R.string.delete_read_chapters_summary, crumbs + ctx.getString(R.string.data_removal), DataCleanupSettingsFragment::class.java)
-				addItem(AppSettings.KEY_CHAPTERS_CLEAR_AUTO, R.string.delete_read_chapters_auto, R.string.runs_on_app_start, crumbs + ctx.getString(R.string.data_removal), DataCleanupSettingsFragment::class.java)
+				addItem(AppSettings.KEY_CHAPTERS_CLEAR_AUTO, R.string.delete_read_chapters_auto, R.string.delete_read_chapters_auto_summary, crumbs + ctx.getString(R.string.data_removal), DataCleanupSettingsFragment::class.java)
 				addItem(AppSettings.KEY_CHAPTERS_CLEAR_KEEP, R.string.delete_read_chapters_keep, R.string.delete_read_chapters_keep_immediate, crumbs + ctx.getString(R.string.data_removal), DataCleanupSettingsFragment::class.java)
 			}
 			group(sectionCrumbs, "Network") { crumbs ->

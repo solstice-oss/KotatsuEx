@@ -96,6 +96,7 @@ import org.koitharu.kotatsu.bookmarks.domain.BookmarksRepository
 import org.koitharu.kotatsu.bookmarks.domain.epubHighlight
 import org.koitharu.kotatsu.bookmarks.domain.epubHighlightUrl
 import eu.kanade.tachiyomi.source.online.HttpSource
+import org.koitharu.kotatsu.core.exceptions.resolve.ExceptionResolver
 import org.koitharu.kotatsu.core.model.isNovelSource
 import org.koitharu.kotatsu.core.model.unwrap
 import org.koitharu.kotatsu.core.nav.router
@@ -106,6 +107,8 @@ import org.koitharu.kotatsu.mihon.model.MihonMangaSource
 import org.koitharu.kotatsu.lnreader.model.absoluteUrl
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.prefs.observeAsFlow
+import org.koitharu.kotatsu.core.util.ext.getDisplayIcon
+import org.koitharu.kotatsu.core.util.ext.getDisplayMessage
 import org.koitharu.kotatsu.core.util.ext.getDrawableOrThrow
 import org.koitharu.kotatsu.core.util.ext.mangaSourceExtra
 import org.koitharu.kotatsu.core.util.ext.getThemeColor
@@ -115,9 +118,11 @@ import org.koitharu.kotatsu.core.util.ext.URI_SCHEME_ZIP
 import org.koitharu.kotatsu.core.util.ext.isZipUri
 import org.koitharu.kotatsu.local.data.input.EpubParser
 import org.koitharu.kotatsu.databinding.FragmentReaderEpubBinding
+import org.koitharu.kotatsu.databinding.ItemErrorStateBinding
 import org.koitharu.kotatsu.databinding.SheetEpubDictionaryBinding
 import org.koitharu.kotatsu.parsers.model.Manga
 import org.koitharu.kotatsu.parsers.model.MangaChapter
+import org.koitharu.kotatsu.parsers.util.ifZero
 import org.koitharu.kotatsu.reader.ui.ReaderState
 import org.koitharu.kotatsu.reader.ui.tts.ReaderTts
 import org.koitharu.kotatsu.reader.ui.pager.BaseReaderAdapter
@@ -126,6 +131,7 @@ import org.koitharu.kotatsu.reader.ui.pager.ReaderPage
 import java.io.Closeable
 import java.io.File
 import java.net.URI
+import java.text.BreakIterator
 import java.time.Instant
 import java.util.UUID
 import java.util.zip.ZipFile
@@ -297,7 +303,7 @@ class EpubReaderFragment : BaseReaderFragment<FragmentReaderEpubBinding>() {
 		viewLifecycleOwner.lifecycleScope.launch {
 			val text = withContext(Dispatchers.Default) {
 				ensureChapterLoaded(index)
-				chapters.getOrNull(index)?.text?.toString()
+				chapters.getOrNull(index)?.content?.toString()
 			}
 			if (!text.isNullOrEmpty()) onLoaded(text)
 		}
@@ -547,8 +553,15 @@ class EpubReaderFragment : BaseReaderFragment<FragmentReaderEpubBinding>() {
 			// Leave content null on failure so the next bind retries. Caching a blank chapter would
 			// permanently blank it, for a remote source where one flaky request is expected and for a
 			// download whose archive was momentarily unreadable alike.
-			val raw = runCatching { chapterContent?.loadHtml(chapter.url) }.getOrNull()
-			if (raw.isNullOrBlank()) return
+			val source = chapterContent ?: return
+			val result = runCatching { source.loadHtml(chapter.url) }
+			val raw = result.getOrNull()
+			if (raw.isNullOrBlank()) {
+				chapter.error = result.exceptionOrNull()
+				chapter.failedAttempts++
+				return
+			}
+			chapter.error = null
 			chapter.content = parseChapter(chapter, raw)
 		}
 	}
@@ -621,7 +634,11 @@ class EpubReaderFragment : BaseReaderFragment<FragmentReaderEpubBinding>() {
 
 	private fun preloadAround(center: Int) {
 		center.preloadRange().forEach { index ->
-			if (chapters[index].content != null || !loadingChapters.add(index)) return@forEach
+			val chapter = chapters[index]
+			// Past the cap a failed chapter waits on its Try again button instead of retrying forever
+			if (chapter.content != null || chapter.failedAttempts >= MAX_AUTO_RETRIES || !loadingChapters.add(index)) {
+				return@forEach
+			}
 			viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
 				try {
 					ensureChapterLoaded(index)
@@ -685,10 +702,9 @@ class EpubReaderFragment : BaseReaderFragment<FragmentReaderEpubBinding>() {
 		fun recolor(recycler: RecyclerView?) {
 			recycler?.setBackgroundColor(background)
 			if (recycler != null) for (index in 0 until recycler.childCount) {
-				(recycler.getChildAt(index) as? TextView)?.apply {
-					setBackgroundColor(background)
-					setTextColor(foreground)
-				}
+				val child = recycler.getChildAt(index)
+				child.setBackgroundColor(background)
+				(child as? TextView ?: child.findViewById<TextView>(R.id.textView_error))?.setTextColor(foreground)
 			}
 		}
 		recolor(verticalView)
@@ -1170,7 +1186,7 @@ class EpubReaderFragment : BaseReaderFragment<FragmentReaderEpubBinding>() {
 		)
 	}
 
-	private fun addHighlight(selection: SelectedText) {
+	private fun addHighlight(selection: SelectedText, showToast: Boolean = true) {
 		val manga = viewModel.getMangaOrNull() ?: return
 		val chapter = chapters.getOrNull(selection.chapter) ?: return
 		if (highlights.any {
@@ -1190,8 +1206,33 @@ class EpubReaderFragment : BaseReaderFragment<FragmentReaderEpubBinding>() {
 		)
 		viewLifecycleOwner.lifecycleScope.launch {
 			withContext(Dispatchers.IO) { bookmarksRepository.addBookmark(bookmark) }
-			Toast.makeText(requireContext(), R.string.highlight_added, Toast.LENGTH_SHORT).show()
+			if (showToast) Toast.makeText(requireContext(), R.string.highlight_added, Toast.LENGTH_SHORT).show()
 		}
+	}
+
+	/** Highlight pick mode (armed from the reader dock): the tapped sentence becomes a highlight. */
+	private fun highlightSentenceAt(textView: TextView, event: MotionEvent) {
+		val location = textView.tag as? TextLocation ?: return
+		val offset = offsetAt(textView, event) ?: return
+		val text = chapters.getOrNull(location.chapter)?.text?.toString() ?: return
+		val at = (location.baseOffset + offset).coerceIn(0, text.lastIndex)
+		// Sentences never cross a paragraph, so break within the tapped paragraph only.
+		val paragraphStart = paragraphStart(text, at)
+		val paragraphEnd = text.indexOf('\n', at).let { if (it < 0) text.length else it }
+		if (paragraphStart >= paragraphEnd) return // tapped the blank line between paragraphs
+		val sentences = BreakIterator.getSentenceInstance()
+		sentences.setText(text.substring(paragraphStart, paragraphEnd))
+		var end = sentences.following(at - paragraphStart)
+		if (end == BreakIterator.DONE) end = paragraphEnd - paragraphStart
+		var start = sentences.previous().coerceAtLeast(0) + paragraphStart
+		end += paragraphStart
+		while (start < end && text[start].isWhitespace()) start++
+		while (end > start && text[end - 1].isWhitespace()) end--
+		if (start == end) return
+		viewModel.isHighlightPicking.value = false
+		val selection = SelectedText(location.chapter, start, end, text.substring(start, end))
+		// the sentence lighting up is the feedback - no toast
+		if (selectedHighlight(selection) == null) addHighlight(selection, showToast = false)
 	}
 
 	private fun selectedHighlight(selection: SelectedText): Bookmark? {
@@ -1225,6 +1266,10 @@ class EpubReaderFragment : BaseReaderFragment<FragmentReaderEpubBinding>() {
 				// Swallow the tap so it doesn't also turn the page or toggle the UI; RecyclerView
 				// still intercepts drags, so scrolling to find a paragraph keeps working.
 				if (event.actionMasked == MotionEvent.ACTION_UP) startTtsAtTap(textView, event)
+				return@setOnTouchListener true
+			}
+			if (viewModel.isHighlightPicking.value) {
+				if (event.actionMasked == MotionEvent.ACTION_UP) highlightSentenceAt(textView, event)
 				return@setOnTouchListener true
 			}
 			when (event.actionMasked) {
@@ -1387,7 +1432,9 @@ class EpubReaderFragment : BaseReaderFragment<FragmentReaderEpubBinding>() {
 			val manager = recycler.layoutManager as? LinearLayoutManager ?: return lastLocator
 			val index = manager.findFirstVisibleItemPosition().takeIf { it >= 0 } ?: return lastLocator
 			val child = manager.findViewByPosition(index) ?: return Locator(index, 0)
-			val layout = (child as? TextView)?.layout ?: return lastLocator
+			// A failed chapter's error card has no text to point into: its start is where we are
+			if (child !is TextView) return Locator(index, 0)
+			val layout = child.layout ?: return lastLocator
 			val visibleOffset = (recycler.paddingTop - child.top).coerceIn(0, layout.height)
 			val charOffset = layout.getLineStart(layout.getLineForVertical(visibleOffset))
 			return Locator(index, charOffset).clamped()
@@ -1646,22 +1693,43 @@ class EpubReaderFragment : BaseReaderFragment<FragmentReaderEpubBinding>() {
 		else -> Layout.Alignment.ALIGN_NORMAL
 	}
 
-	private inner class ChapterAdapter : RecyclerView.Adapter<TextHolder>() {
-		override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = TextHolder(createTextView(parent, false))
+	private inner class ChapterAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+		override fun getItemViewType(position: Int) = if (chapters[position].isFailed) VIEW_TYPE_ERROR else VIEW_TYPE_TEXT
+		override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = if (viewType == VIEW_TYPE_ERROR) {
+			ErrorHolder(parent)
+		} else {
+			TextHolder(createTextView(parent, false))
+		}
 		override fun getItemCount() = chapters.size
-		override fun onBindViewHolder(holder: TextHolder, position: Int) {
-			applyTextStyle(holder.text, false)
-			holder.text.tag = TextLocation(position, 0)
-			holder.text.text = styledChapterText(position)
+		override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+			when (holder) {
+				is ErrorHolder -> holder.bind(position)
+				is TextHolder -> {
+					applyTextStyle(holder.text, false)
+					holder.text.tag = TextLocation(position, 0)
+					holder.text.text = styledChapterText(position)
+				}
+			}
 			preloadAround(position)
 		}
 	}
 
-	private inner class PageAdapter : RecyclerView.Adapter<TextHolder>() {
-		override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = TextHolder(createTextView(parent, true))
+	private inner class PageAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+		override fun getItemViewType(position: Int) =
+			if (chapters[pages[position].chapter].isFailed) VIEW_TYPE_ERROR else VIEW_TYPE_TEXT
+		override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = if (viewType == VIEW_TYPE_ERROR) {
+			ErrorHolder(parent)
+		} else {
+			TextHolder(createTextView(parent, true))
+		}
 		override fun getItemCount() = pages.size
-		override fun onBindViewHolder(holder: TextHolder, position: Int) {
+		override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
 			val page = pages[position]
+			if (holder is ErrorHolder) {
+				holder.bind(page.chapter)
+				return
+			}
+			holder as TextHolder
 			val chapterText = styledChapterText(page.chapter)
 			val visibleStart = (page.start until page.end).firstOrNull { !chapterText[it].isWhitespace() } ?: page.end
 			applyTextStyle(holder.text, true)
@@ -1671,6 +1739,61 @@ class EpubReaderFragment : BaseReaderFragment<FragmentReaderEpubBinding>() {
 	}
 
 	private class TextHolder(val text: TextView) : RecyclerView.ViewHolder(text)
+
+	/** A chapter that failed to load, in the same message + Try again form as a failed manga page. */
+	private inner class ErrorHolder(
+		parent: ViewGroup,
+		private val binding: ItemErrorStateBinding = ItemErrorStateBinding.inflate(layoutInflater, parent, false),
+	) : RecyclerView.ViewHolder(binding.root) {
+
+		private var chapterIndex = -1
+
+		init {
+			binding.buttonRetry.setOnClickListener { button ->
+				button.isEnabled = false
+				retryChapter(chapterIndex)
+			}
+		}
+
+		fun bind(index: Int) {
+			chapterIndex = index
+			val error = chapters[index].error
+			binding.root.setBackgroundColor(backgroundColor)
+			with(binding.textViewError) {
+				text = error?.getDisplayMessage(resources) ?: getString(R.string.chapter_no_content)
+				setTextColor(foregroundColor)
+				setCompoundDrawablesWithIntrinsicBounds(0, error?.getDisplayIcon() ?: R.drawable.ic_error_large, 0, 0)
+			}
+			with(binding.buttonRetry) {
+				isEnabled = true
+				setText((error?.let(ExceptionResolver::getResolveStringId) ?: 0).ifZero { R.string.try_again })
+			}
+		}
+	}
+
+	/**
+	 * Solves what the error asks for first (a captcha, a sign-in), then loads the chapter again with
+	 * a fresh set of automatic retries, like a manga page's Try again.
+	 */
+	private fun retryChapter(index: Int) {
+		val chapter = chapters.getOrNull(index) ?: return
+		viewLifecycleOwner.lifecycleScope.launch {
+			chapter.error?.takeIf(ExceptionResolver::canResolve)?.let { exceptionResolver.resolve(it) }
+			chapter.failedAttempts = 0
+			setChapterLoading(true)
+			try {
+				withContext(Dispatchers.IO) { ensureChapterLoaded(index) }
+			} finally {
+				setChapterLoading(false)
+			}
+			if (isPagedMode) {
+				// The chapter was laid out as a single error page; paginate its real text now
+				refreshReader(Locator(index, 0))
+			} else {
+				verticalView?.adapter?.notifyItemChanged(index)
+			}
+		}
+	}
 	private class HighlightColorSpan(var color: Int) : CharacterStyle(), UpdateAppearance {
 		override fun updateDrawState(tp: TextPaint) {
 			tp.bgColor = color
@@ -1882,6 +2005,15 @@ class EpubReaderFragment : BaseReaderFragment<FragmentReaderEpubBinding>() {
 		@Volatile
 		var content: Spanned? = null
 		val text: Spanned get() = content ?: EMPTY_CHAPTER_TEXT
+
+		/** Why the last load failed; null with [failedAttempts] > 0 means the source sent no text. */
+		@Volatile
+		var error: Throwable? = null
+
+		@Volatile
+		var failedAttempts = 0
+
+		val isFailed: Boolean get() = content == null && failedAttempts > 0
 	}
 
 	/**
@@ -2014,6 +2146,9 @@ class EpubReaderFragment : BaseReaderFragment<FragmentReaderEpubBinding>() {
 		private const val MAX_SEARCH_RESULTS = 100
 		private const val PROGRESS_INTERVAL_MS = 50L
 		private const val LOAD_RETRY_DELAY_MS = 3000L
+		private const val MAX_AUTO_RETRIES = 3
+		private const val VIEW_TYPE_TEXT = 0
+		private const val VIEW_TYPE_ERROR = 1
 		private const val PAGE_LOOKAHEAD = 1
 		private const val PRELOAD_RADIUS = 2
 		private const val SCROLL_INFO_BAR_HEIGHT_DP = 24

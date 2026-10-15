@@ -405,13 +405,11 @@
     <string name="backups_output_directory">Каталог для сохранения резервных копий</string>
     <string name="last_successful_backup">Последняя резервная копия: %s</string>
     <string name="lock_screen_rotation">Блокировка поворота экрана</string>
-    <string name="sources_catalog">Каталог источников</string>
     <string name="content_type_manga">Манга</string>
     <string name="content_type_hentai">Хентай</string>
     <string name="content_type_comics">Комиксы</string>
     <string name="no_manga_sources_found">Не найдено доступных источников по вашему запросу</string>
     <string name="manual">Вручную</string>
-    <string name="disable_nsfw_summary">Отключить NSFW источники и скрывать мангу для взрослых в списках, если это возможно</string>
     <string name="content_type_other">Другое</string>
     <string name="state_paused">Приостановлено</string>
     <string name="error_multiple_states_not_supported">Фильтрация по нескольким состояниям не поддерживается этим источником манги</string>
@@ -510,7 +508,6 @@
     <string name="delete_read_chapters_summary">Удалите главы, которые вы уже прочитали, из локального хранилища, чтобы освободить место</string>
     <string name="delete_read_chapters_auto">Автоматически удалять прочитанные главы</string>
     <string name="long_ago_read">Давно прочитанная</string>
-    <string name="runs_on_app_start">Запускается при запуске приложения</string>
     <string name="unread">Непрочитанная</string>
     <string name="order_oldest">Самые старые</string>
     <string name="delete_read_chapters_prompt">Это приведёт к безвозвратному удалению всех глав, помеченных как прочитанные, из вашего локального хранилища. Вы можете повторно загрузить их позже, но импортированные главы могут быть потеряны навсегда</string>

@@ -2,9 +2,18 @@ package org.koitharu.kotatsu.history.data
 
 import androidx.room.withTransaction
 import dagger.Reusable
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import org.koitharu.kotatsu.core.db.MangaDatabase
 import org.koitharu.kotatsu.core.db.entity.toEntity
 import org.koitharu.kotatsu.core.db.entity.toManga
@@ -20,6 +29,7 @@ import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.prefs.ProgressIndicatorMode
 import org.koitharu.kotatsu.core.ui.util.ReversibleHandle
 import org.koitharu.kotatsu.core.util.ext.mapItems
+import org.koitharu.kotatsu.core.util.ext.processLifecycleScope
 import org.koitharu.kotatsu.history.domain.model.MangaWithHistory
 import org.koitharu.kotatsu.list.domain.ListFilterOption
 import org.koitharu.kotatsu.list.domain.ListSortOrder
@@ -37,6 +47,10 @@ import org.koitharu.kotatsu.tracker.domain.CheckNewChaptersUseCase
 import kotlin.math.ceil
 import javax.inject.Inject
 import javax.inject.Provider
+
+/** Process-wide: the repository is @Reusable, so instances aren't shared. */
+private val writeMutex = Mutex()
+private val scrobbleMutex = Mutex()
 
 @Reusable
 class HistoryRepository @Inject constructor(
@@ -112,15 +126,73 @@ class HistoryRepository @Inject constructor(
 		}
 	}
 
-	suspend fun addOrUpdate(manga: Manga, chapterId: Long, page: Int, scroll: Int, percent: Float, force: Boolean) {
+	/**
+	 * @param notify run the new-chapters check and the scrobblers afterwards. Both only look at the
+	 * chapter, so the reader's in-chapter autosaves skip them instead of hitting trackers every few seconds.
+	 */
+	suspend fun addOrUpdate(
+		manga: Manga,
+		chapterId: Long,
+		page: Int,
+		scroll: Int,
+		percent: Float,
+		force: Boolean,
+		notify: Boolean = true,
+	) {
 		if (!force && shouldSkip(manga)) {
 			return
 		}
 		assert(manga.chapters != null)
-		db.withTransaction {
-			addOrUpdateLocked(manga, chapterId, page, scroll, percent)
+		// One write at a time, in the order they were asked for: a reader autosave landing after the
+		// pause save that replaced it would roll the position back. Trackers run outside the lock.
+		val isChapterChanged = writeMutex.withLock {
+			// cancelled while waiting = superseded by a newer save of the same position
+			currentCoroutineContext().ensureActive()
+			withContext(NonCancellable) {
+				db.withTransaction {
+					val previousChapterId = db.getHistoryDao().find(manga.id)?.chapterId
+					addOrUpdateLocked(manga, chapterId, page, scroll, percent)
+					previousChapterId != chapterId
+				}
+			}
 		}
-		onHistoryChanged(manga, chapterId, updateScrobblers = true)
+		if (notify) {
+			// trackers only store the chapter, so re-sending an unchanged one is a wasted network round trip
+			onHistoryChanged(manga, chapterId, updateScrobblers = isChapterChanged)
+		}
+	}
+
+	/**
+	 * Saves only the position inside the chapter that is already stored. Rewriting the manga, its
+	 * tags and the feed on every reader autosave made the library, history and feed reload while
+	 * reading. Falls back to [addOrUpdate] when there is no entry for this chapter yet.
+	 */
+	suspend fun updatePosition(
+		manga: Manga,
+		chapterId: Long,
+		page: Int,
+		scroll: Int,
+		percent: Float,
+	) {
+		if (shouldSkip(manga)) {
+			return
+		}
+		val updated = writeMutex.withLock {
+			currentCoroutineContext().ensureActive()
+			withContext(NonCancellable) {
+				db.getHistoryDao().updatePosition(
+					mangaId = manga.id,
+					chapterId = chapterId,
+					page = page,
+					scroll = scroll.toFloat(),
+					percent = percent,
+					updatedAt = System.currentTimeMillis(),
+				)
+			}
+		}
+		if (updated == 0) {
+			addOrUpdate(manga, chapterId, page, scroll, percent, force = false, notify = false)
+		}
 	}
 
 	suspend fun advanceFromTracking(
@@ -184,12 +256,18 @@ class HistoryRepository @Inject constructor(
 	 * Runs after the history transaction commits. Inside it, the new-chapters check waited for its
 	 * per-manga lock while holding the database - the background checker takes that lock first and
 	 * then needs the database, so the two could deadlock every write in the app. Scrobblers make
-	 * network calls, which also must not hold the database.
+	 * network calls, which must neither hold the database nor make the caller wait.
 	 */
 	private suspend fun onHistoryChanged(manga: Manga, chapterId: Long, updateScrobblers: Boolean) {
 		newChaptersUseCaseProvider.get()(manga, chapterId)
 		if (updateScrobblers) {
-			scrobblers.forEach { it.tryScrobble(manga, chapterId) }
+			// Fire and forget: opening the reader used to wait on every tracker's network write.
+			// UNDISPATCHED queues on the mutex in call order, so an older chapter never lands last.
+			processLifecycleScope.launch(Dispatchers.Default, CoroutineStart.UNDISPATCHED) {
+				scrobbleMutex.withLock {
+					scrobblers.forEach { it.tryScrobble(manga, chapterId) }
+				}
+			}
 		}
 	}
 

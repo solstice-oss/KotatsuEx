@@ -36,6 +36,8 @@ import java.util.Comparator
 import java.util.EnumSet
 import java.util.LinkedHashSet
 import javax.inject.Inject
+import org.koitharu.kotatsu.core.model.ContentWarning
+import org.koitharu.kotatsu.core.model.descriptionSuffix
 
 @HiltViewModel
 class SourcesCatalogViewModel @Inject constructor(
@@ -63,8 +65,8 @@ class SourcesCatalogViewModel @Inject constructor(
 	private val installingPackages = MutableStateFlow<Set<String>>(emptySet())
 	private val refreshTrigger = MutableStateFlow(0)
 	val isRefreshing = MutableStateFlow(false)
-	val isNsfwDisabled = settings.observeAsFlow(AppSettings.KEY_DISABLE_NSFW) { isNsfwContentDisabled }
-		.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, settings.isNsfwContentDisabled)
+	val contentFilter = settings.observeAsFlow(AppSettings.KEY_CONTENT_FILTER) { contentFilter }
+		.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, settings.contentFilter)
 	val isPrivateMode = settings.observeAsFlow(AppSettings.KEY_PRIVATE_INSTALLER) { isPrivateInstallEnabled }
 		.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, settings.isPrivateInstallEnabled)
 	val appliedFilter = MutableStateFlow(
@@ -112,6 +114,7 @@ class SourcesCatalogViewModel @Inject constructor(
 		isPrivateMode,
 		activePageId,
 		storeManager.states,
+		contentFilter,
 	) { args ->
 		val q = args[0] as String?
 		val f = args[1] as SourcesCatalogFilter
@@ -177,8 +180,13 @@ class SourcesCatalogViewModel @Inject constructor(
 
 	fun hasExternalRepoConfigured(): Boolean = storeManager.stores().isNotEmpty()
 
-	fun setNsfwDisabled(value: Boolean) {
-		settings.isNsfwContentDisabled = value
+	/** All -> SFW & Mixed -> SFW only -> All. */
+	fun cycleContentFilter() {
+		settings.contentFilter = when (contentFilter.value) {
+			ContentWarning.NSFW -> ContentWarning.MIXED
+			ContentWarning.MIXED -> ContentWarning.SAFE
+			ContentWarning.SAFE -> ContentWarning.NSFW
+		}
 	}
 
 	/** Hides or shows an installed extension in Explore. It stays listed in the manager. */
@@ -397,7 +405,7 @@ class SourcesCatalogViewModel @Inject constructor(
 			val source = installedSourcesByPackage[local.pkgName]
 				?.firstOrNull { it.language == local.lang }
 				?: installedSourcesByPackage[local.pkgName]?.firstOrNull()
-			if (settings.isNsfwContentDisabled && local.isNsfw) continue
+			if (local.contentWarning > contentFilter.value) continue
 			if (filter.locale != null && local.lang != filter.locale) continue
 			if (!matchesExtensionQuery(q, local.appName, local.pkgName)) continue
 			val ownerSuffix = owner?.displayName?.let { " • $it" }.orEmpty()
@@ -410,6 +418,7 @@ class SourcesCatalogViewModel @Inject constructor(
 						append(" • ")
 						append(entry.versionName)
 						append(ownerSuffix)
+						append(entry.contentWarning.descriptionSuffix(appContext))
 					},
 					action = SourceCatalogItem.Extension.Action.UPDATE,
 					isInProgress = entry.packageName in inProgress,
@@ -428,8 +437,8 @@ class SourcesCatalogViewModel @Inject constructor(
 					append(getExternalExtensionLanguageDisplayName(local.lang))
 					append(" • ")
 					append(local.versionName)
-					if (local.isNsfw) append(" • 18+")
 					append(ownerSuffix)
+					append(local.contentWarning.descriptionSuffix(appContext))
 				},
 				action = if (mode == ExtensionInstallMode.SANDBOX) {
 					SourceCatalogItem.Extension.Action.DISABLE
@@ -562,7 +571,7 @@ class SourcesCatalogViewModel @Inject constructor(
 			storeId = storeState.store.id,
 			action = SourceCatalogItem.Extension.Action.INSTALL,
 			isPrivateMode = false,
-			lnCatalog = available.filter { it.isLnPlugin },
+			catalog = available,
 		)
 		val recommendedPackages = recommended.mapTo(HashSet(recommended.size)) { it.packageName }
 		val installedItems = buildStoreInstalledItems(
@@ -574,7 +583,7 @@ class SourcesCatalogViewModel @Inject constructor(
 
 		for (entry in available) {
 			if (entry.packageName in recommendedPackages) continue // surfaced in the Recommended section
-			if (settings.isNsfwContentDisabled && entry.isNsfw != 0) continue
+			if (entry.contentWarning > contentFilter.value) continue
 			if (locale != null && entry.lang != locale) continue
 			if (!matchesExtensionQuery(q, entry.name, entry.packageName)) continue
 
@@ -602,9 +611,7 @@ class SourcesCatalogViewModel @Inject constructor(
 				append(getExternalExtensionLanguageDisplayName(entry.lang.orEmpty()))
 				append(" • ")
 				append(entry.versionName)
-				if (entry.isNsfw != 0) {
-					append(" • 18+")
-				}
+				append(entry.contentWarning.descriptionSuffix(appContext))
 			}
 			val iconUrl = entry.iconUrl ?: externalRepoRepository.resolveIconUrl(repoUrl, entry.packageName)
 			availableItems += SourceCatalogItem.Extension(
@@ -671,7 +678,7 @@ class SourcesCatalogViewModel @Inject constructor(
 		storeId: String,
 		action: SourceCatalogItem.Extension.Action,
 		isPrivateMode: Boolean,
-		lnCatalog: List<ExternalExtensionRepoEntry>,
+		catalog: List<ExternalExtensionRepoEntry>,
 	): List<SourceCatalogItem.Extension> {
 		val sources = runCatching {
 			mangaDatabase.getMangaDao().findExternalSourcesInLibrary()
@@ -682,8 +689,8 @@ class SourcesCatalogViewModel @Inject constructor(
 		// below: the library stores the plugin id itself, which is exactly what the index is keyed by.
 		val wantedPlugins = sources.filter { it.startsWith(LN_SOURCE_PREFIX) }
 			.mapTo(HashSet()) { it.removePrefix(LN_SOURCE_PREFIX) }
-		for (entry in lnCatalog) {
-			if (entry.packageName !in wantedPlugins) continue
+		for (entry in catalog) {
+			if (!entry.isLnPlugin || entry.packageName !in wantedPlugins) continue
 			if (lnPluginManager.isInstalled(entry.packageName)) continue
 			if (!matchesExtensionQuery(query, entry.name, entry.packageName)) continue
 			out += SourceCatalogItem.Extension(
@@ -705,9 +712,10 @@ class SourcesCatalogViewModel @Inject constructor(
 				subtitle = appContext.getString(R.string.recommended_extension_subtitle),
 				action = action,
 				isInProgress = pkg in inProgress,
-				// Real extension icon when a repo is configured; otherwise the row falls back to a
-				// generated favicon (handled in the adapter).
-				iconUrl = repoUrl?.takeIf { it.isNotBlank() }?.let { externalRepoRepository.resolveIconUrl(it, pkg) },
+				// Same resolution as the Available rows: the index's own icon url wins, the repo's
+				// conventional icon path is only a fallback.
+				iconUrl = catalog.firstOrNull { it.packageName == pkg }?.iconUrl
+					?: repoUrl?.takeIf { it.isNotBlank() }?.let { externalRepoRepository.resolveIconUrl(it, pkg) },
 				storeId = storeId,
 				isPrivateMode = isPrivateMode,
 			)
@@ -752,7 +760,7 @@ class SourcesCatalogViewModel @Inject constructor(
 			storeId = storeState.store.id,
 			action = SourceCatalogItem.Extension.Action.ENABLE,
 			isPrivateMode = true,
-			lnCatalog = available.filter { it.isLnPlugin },
+			catalog = available,
 		)
 		val recommendedPackages = recommended.mapTo(HashSet(recommended.size)) { it.packageName }
 		val installedItems = buildStoreInstalledItems(
@@ -793,7 +801,7 @@ class SourcesCatalogViewModel @Inject constructor(
 			) {
 				continue
 			}
-			if (settings.isNsfwContentDisabled && entry.isNsfw != 0) continue
+			if (entry.contentWarning > contentFilter.value) continue
 			if (locale != null && entry.lang != locale) continue
 			if (!matchesExtensionQuery(q, entry.name, entry.packageName)) continue
 			val pkgSources = allInstalledSourcesByPkg[entry.packageName] ?: installedSourcesByPkg[entry.packageName]
@@ -802,7 +810,7 @@ class SourcesCatalogViewModel @Inject constructor(
 				append(getExternalExtensionLanguageDisplayName(entry.lang.orEmpty()))
 				append(" • ")
 				append(entry.versionName)
-				if (entry.isNsfw != 0) append(" • 18+")
+				append(entry.contentWarning.descriptionSuffix(appContext))
 			}
 			val iconUrl = entry.iconUrl ?: externalRepoRepository.resolveIconUrl(repoUrl, entry.packageName)
 			disabledItems += SourceCatalogItem.Extension(
@@ -855,7 +863,7 @@ class SourcesCatalogViewModel @Inject constructor(
 			.mapNotNull { local ->
 				val owner = storeManager.owner(mode, local) ?: return@mapNotNull null
 				if (owner.id != storeState.store.id) return@mapNotNull null
-				if (settings.isNsfwContentDisabled && local.isNsfw) return@mapNotNull null
+				if (local.contentWarning > contentFilter.value) return@mapNotNull null
 				if (filter.locale != null && local.lang != filter.locale) return@mapNotNull null
 				if (!matchesExtensionQuery(query, local.appName, local.pkgName)) return@mapNotNull null
 				val entry = storeState.catalog.firstOrNull { it.packageName == local.pkgName }
@@ -868,8 +876,8 @@ class SourcesCatalogViewModel @Inject constructor(
 					subtitle = buildString {
 						append(getExternalExtensionLanguageDisplayName(local.lang))
 						append(" • ").append(local.versionName)
-						if (local.isNsfw) append(" • 18+")
 						append(" • ").append(owner.displayName)
+						append(local.contentWarning.descriptionSuffix(appContext))
 					},
 					action = if (privateMode) SourceCatalogItem.Extension.Action.DISABLE
 					else SourceCatalogItem.Extension.Action.UNINSTALL,

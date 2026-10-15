@@ -78,6 +78,14 @@ class LocalMangaDirOutput(
 		true
 	}
 
+	override suspend fun discardChapter(chapter: MangaChapter) = mutex.withLock {
+		val output = chaptersOutput.remove(chapter) ?: return@withLock
+		output.closeQuietly()
+		output.file.deleteAwait()
+		index.removeChapter(chapter.id)
+		flushIndex()
+	}
+
 	override suspend fun finish() = mutex.withLock {
 		flushIndex()
 		for (output in chaptersOutput.values) {
@@ -118,6 +126,7 @@ class LocalMangaDirOutput(
 		check(victimsIds.isEmpty()) {
 			"${victimsIds.size} of ${ids.size} chapters was not removed: not found"
 		}
+		flushIndex()
 	}
 
 	private suspend fun ZipOutput.flushAndFinish() = runInterruptible(Dispatchers.IO) {
