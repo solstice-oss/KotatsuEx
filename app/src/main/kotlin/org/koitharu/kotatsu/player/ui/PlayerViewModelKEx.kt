@@ -175,7 +175,7 @@ class PlayerViewModelKEx @Inject constructor(
 		}
 
 		if (dataSourceFactory != null) {
-			val mediaSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+			val mediaSource = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(dataSourceFactory)
 				.createMediaSource(mediaItem)
 			p.setMediaSource(mediaSource)
 		} else {

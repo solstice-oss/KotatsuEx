@@ -162,19 +162,7 @@ class AniyomiAnimeRepositoryKEx(
 	}
 
 	override suspend fun getPagesImpl(manga: Manga, chapter: MangaChapter): List<MangaPage> = withContext(Dispatchers.IO) {
-		val httpSource = aniyomiSource as? AnimeHttpSource ?: return@withContext emptyList()
-		val sEpisode = chapter.toSEpisode()
-		sourceMetadata.restoreEpisodeMemo(source.sourceId, chapter.source.name, chapter.url)?.let {
-			sEpisode.memo = it
-		}
-
-		val videos: List<Video> = try {
-			httpSource.getVideoList(sEpisode)
-		} catch (e: Exception) {
-			Log.e("AniyomiRepository", "Failed to fetch video list for ${chapter.url}", e)
-			emptyList()
-		}
-
+		val videos = getVideoList(chapter)
 		videos.map { video ->
 			video.toMangaPage(source, chapter.url)
 		}
@@ -190,11 +178,53 @@ class AniyomiAnimeRepositoryKEx(
 		sourceMetadata.restoreEpisodeMemo(source.sourceId, chapter.source.name, chapter.url)?.let {
 			sEpisode.memo = it
 		}
-		try {
-			httpSource.getVideoList(sEpisode)
-		} catch (e: Exception) {
-			Log.e("AniyomiRepository", "Failed to fetch video list for ${chapter.url}", e)
-			emptyList()
+		resolveEpisodeVideos(httpSource, sEpisode)
+	}
+
+	private suspend fun resolveEpisodeVideos(httpSource: AnimeHttpSource, episode: SEpisode): List<Video> {
+		val videos = mutableListOf<Video>()
+
+		val hasHosters = checkHasHosters(httpSource)
+		if (hasHosters) {
+			val hosters = runCatching { httpSource.getHosterList(episode) }.getOrDefault(emptyList())
+			for (hoster in hosters) {
+				val hosterVideos = if (hoster.videoList != null) {
+					hoster.videoList.orEmpty()
+				} else {
+					runCatching { httpSource.getVideoList(hoster) }.getOrDefault(emptyList())
+				}
+				videos.addAll(hosterVideos)
+			}
 		}
+
+		if (videos.isEmpty()) {
+			val directVideos = runCatching { httpSource.getVideoList(episode) }.getOrDefault(emptyList())
+			videos.addAll(directVideos)
+		}
+
+		return videos.map { video ->
+			if (video.videoUrl.isBlank() || video.videoUrl == "null") {
+				val resolvedUrl = runCatching { httpSource.getVideoUrl(video) }.getOrNull()
+					?: runCatching { httpSource.resolveVideo(video)?.videoUrl }.getOrNull()
+				if (!resolvedUrl.isNullOrBlank()) {
+					video.copy(videoUrl = resolvedUrl)
+				} else {
+					video
+				}
+			} else {
+				video
+			}
+		}
+	}
+
+	private fun checkHasHosters(source: AnimeHttpSource): Boolean {
+		var current: Class<*>? = source.javaClass
+		while (current != null && current != eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource::class.java && current != AnimeHttpSource::class.java && current != eu.kanade.tachiyomi.animesource.AnimeSource::class.java) {
+			if (current.declaredMethods.any { it.name in listOf("getHosterList", "hosterListRequest", "hosterListParse") }) {
+				return true
+			}
+			current = current.superclass
+		}
+		return false
 	}
 }
