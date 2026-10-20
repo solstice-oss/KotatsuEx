@@ -14,6 +14,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerView
@@ -23,6 +25,8 @@ import kotlinx.coroutines.delay
 @Composable
 fun PlayerScreenKEx(
 	viewModel: PlayerViewModelKEx,
+	topInset: Dp = 0.dp,
+	bottomInset: Dp = 0.dp,
 	onBack: () -> Unit,
 ) {
 	val isPlaying by viewModel.isPlaying.collectAsState()
@@ -81,6 +85,8 @@ fun PlayerScreenKEx(
 			speed = speed,
 			chapters = chapters,
 			currentChapter = currentChapter,
+			topInset = topInset,
+			bottomInset = bottomInset,
 			onTogglePlayPause = { viewModel.togglePlayPause() },
 			onSeekTo = { viewModel.seekTo(it) },
 			onRewind10 = { viewModel.rewind10() },

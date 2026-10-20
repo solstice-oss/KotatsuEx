@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,21 +19,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ClosedCaption
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -45,7 +39,6 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -55,12 +48,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import eu.kanade.tachiyomi.animesource.model.Video
 import org.koitharu.kotatsu.parsers.model.MangaChapter
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlayerControlsKEx(
 	isVisible: Boolean,
@@ -75,6 +68,8 @@ fun PlayerControlsKEx(
 	speed: Float,
 	chapters: List<MangaChapter>,
 	currentChapter: MangaChapter?,
+	topInset: Dp = 0.dp,
+	bottomInset: Dp = 0.dp,
 	onTogglePlayPause: () -> Unit,
 	onSeekTo: (Long) -> Unit,
 	onRewind10: () -> Unit,
@@ -88,7 +83,6 @@ fun PlayerControlsKEx(
 ) {
 	var showQualitySheet by remember { mutableStateOf(false) }
 	var showSpeedSheet by remember { mutableStateOf(false) }
-	var showChapterSheet by remember { mutableStateOf(false) }
 
 	AnimatedVisibility(
 		visible = isVisible,
@@ -96,6 +90,9 @@ fun PlayerControlsKEx(
 		exit = fadeOut(),
 		modifier = modifier,
 	) {
+		val effectiveTopInset = if (topInset > 0.dp) topInset else 28.dp
+		val effectiveBottomInset = if (bottomInset > 0.dp) bottomInset else 20.dp
+
 		Box(
 			modifier = Modifier
 				.fillMaxSize()
@@ -111,12 +108,12 @@ fun PlayerControlsKEx(
 				modifier = Modifier
 					.fillMaxWidth()
 					.align(Alignment.TopCenter)
-					.padding(horizontal = 16.dp, vertical = 24.dp),
+					.padding(start = 16.dp, end = 16.dp, top = effectiveTopInset + 16.dp, bottom = 16.dp),
 				verticalAlignment = Alignment.CenterVertically,
 			) {
 				IconButton(onClick = onBack) {
 					Icon(
-						imageVector = Icons.Default.ArrowBack,
+						imageVector = Icons.AutoMirrored.Filled.ArrowBack,
 						contentDescription = "Back",
 						tint = Color.White,
 					)
@@ -207,7 +204,7 @@ fun PlayerControlsKEx(
 				modifier = Modifier
 					.fillMaxWidth()
 					.align(Alignment.BottomCenter)
-					.padding(horizontal = 24.dp, vertical = 24.dp),
+					.padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = effectiveBottomInset + 16.dp),
 			) {
 				Row(
 					modifier = Modifier.fillMaxWidth(),
@@ -244,12 +241,15 @@ fun PlayerControlsKEx(
 		if (showQualitySheet) {
 			ModalBottomSheet(
 				onDismissRequest = { showQualitySheet = false },
+				containerColor = MaterialTheme.colorScheme.surfaceContainer,
+				contentColor = MaterialTheme.colorScheme.onSurface,
 			) {
 				Column(modifier = Modifier.padding(16.dp)) {
 					Text(
 						text = "Video Quality / Server",
 						style = MaterialTheme.typography.titleMedium,
 						fontWeight = FontWeight.Bold,
+						color = MaterialTheme.colorScheme.onSurface,
 						modifier = Modifier.padding(bottom = 12.dp),
 					)
 					LazyColumn {
@@ -262,11 +262,13 @@ fun PlayerControlsKEx(
 								},
 								shape = RoundedCornerShape(12.dp),
 								color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+								contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
 								modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
 							) {
 								Text(
 									text = video.videoTitle.ifBlank { video.quality.ifBlank { "Stream" } },
 									style = MaterialTheme.typography.bodyMedium,
+									color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
 									modifier = Modifier.padding(16.dp),
 								)
 							}
@@ -280,12 +282,15 @@ fun PlayerControlsKEx(
 		if (showSpeedSheet) {
 			ModalBottomSheet(
 				onDismissRequest = { showSpeedSheet = false },
+				containerColor = MaterialTheme.colorScheme.surfaceContainer,
+				contentColor = MaterialTheme.colorScheme.onSurface,
 			) {
 				Column(modifier = Modifier.padding(16.dp)) {
 					Text(
 						text = "Playback Speed",
 						style = MaterialTheme.typography.titleMedium,
 						fontWeight = FontWeight.Bold,
+						color = MaterialTheme.colorScheme.onSurface,
 						modifier = Modifier.padding(bottom = 12.dp),
 					)
 					listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f).forEach { s ->
@@ -297,11 +302,13 @@ fun PlayerControlsKEx(
 							},
 							shape = RoundedCornerShape(12.dp),
 							color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+							contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
 							modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
 						) {
 							Text(
 								text = "${s}x",
 								style = MaterialTheme.typography.bodyMedium,
+								color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
 								modifier = Modifier.padding(16.dp),
 							)
 						}
@@ -319,8 +326,8 @@ private fun formatTime(millis: Long): String {
 	val minutes = (totalSeconds / 60) % 60
 	val hours = totalSeconds / 3600
 	return if (hours > 0) {
-		String.format("%d:%02d:%02d", hours, minutes, seconds)
+		String.format(java.util.Locale.US, "%d:%02d:%02d", hours, minutes, seconds)
 	} else {
-		String.format("%02d:%02d", minutes, seconds)
+		String.format(java.util.Locale.US, "%02d:%02d", minutes, seconds)
 	}
 }
