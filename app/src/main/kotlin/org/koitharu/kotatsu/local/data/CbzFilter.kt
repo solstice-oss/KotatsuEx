@@ -35,7 +35,7 @@ fun hasEpubExtension(string: String): Boolean {
 
 fun isSupportedArchive(string: String): Boolean {
 	val ext = string.substringAfterLast('.', "")
-	return isZipExtension(ext) || isPdfExtension(ext) || isEpubExtension(ext)
+	return isZipExtension(ext) || isPdfExtension(ext) || isEpubExtension(ext) || isVideoExtension(ext) // <-- KEx
 }
 
 /** Deep enough for `book/volume/chapter/page.jpg`, shallow enough not to walk a whole memory card. */

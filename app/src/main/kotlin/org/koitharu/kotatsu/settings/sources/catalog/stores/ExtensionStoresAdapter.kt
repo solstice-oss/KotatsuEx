@@ -84,6 +84,9 @@ class ExtensionStoresAdapter(
 					when (kind) {
 						ExtensionStoreKind.MANGA -> R.string.store_kind_manga
 						ExtensionStoreKind.NOVEL -> R.string.store_kind_novel
+						// KEx -->
+						ExtensionStoreKind.ANIME -> R.string.store_kind_anime
+						// KEx <--
 						ExtensionStoreKind.MIXED -> R.string.store_kind_mixed
 					},
 				)

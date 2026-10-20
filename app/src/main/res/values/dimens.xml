@@ -128,7 +128,7 @@
 	<!-- Leading icon of a standard popup/overflow menu item. Matches top_bar_action_icon_size so a
 	     menu opened from the top bar keeps the same icon size as the bar it dropped out of. -->
 	<dimen name="menu_popup_item_icon_size">22dp</dimen>
-	<dimen name="explore_header_side_width">104dp</dimen>
+	<dimen name="explore_header_side_width">94dp</dimen>
 	<dimen name="menu_popup_item_padding_horizontal">12dp</dimen>
 	<dimen name="menu_popup_selector_inset_horizontal">4dp</dimen>
 	<dimen name="menu_popup_selector_inset_vertical">4dp</dimen>

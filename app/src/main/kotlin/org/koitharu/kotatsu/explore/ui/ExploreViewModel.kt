@@ -19,7 +19,9 @@ import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.plus
 import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.aniyomi.model.AniyomiAnimeSourceKEx
 import org.koitharu.kotatsu.core.model.MangaSourceInfo
+import org.koitharu.kotatsu.core.model.isAnimeSource
 import org.koitharu.kotatsu.core.model.isNovelSource
 import org.koitharu.kotatsu.core.os.AppShortcutManager
 import org.koitharu.kotatsu.core.prefs.AppSettings
@@ -200,10 +202,14 @@ class ExploreViewModel @Inject constructor(
 
 	fun sourcesSnapshot(ids: LongSet): List<MangaSourceInfo> {
 		val content = sources.value
-		return (content.manga + content.novel).mapNotNull {
+		return (content.manga + content.novel + content.anime).mapNotNull { // <-- KEx
 			(it as? MangaSourceItem)?.takeIf { x -> x.id in ids }?.source
 		}
 	}
+
+	// KEx -->
+	private enum class SourceKind { MANGA, NOVEL, ANIME }
+	// KEx <--
 
 	@Suppress("UNCHECKED_CAST")
 	private fun createSourcesFlow() = kotlinx.coroutines.flow.combine(
@@ -221,12 +227,17 @@ class ExploreViewModel @Inject constructor(
 		val isLanguageTipEnabled = args[4] as Boolean
 		val packagesWithUpdates = args[5] as Set<String>
 		ExploreSources(
+			// KEx -->
 			manga = buildSourcesPage(
-				allSources, isExtensionsLoading, isGrid, hasMultiLanguageSources, isLanguageTipEnabled, packagesWithUpdates, false,
+				allSources, isExtensionsLoading, isGrid, hasMultiLanguageSources, isLanguageTipEnabled, packagesWithUpdates, SourceKind.MANGA,
 			),
 			novel = buildSourcesPage(
-				allSources, isExtensionsLoading, isGrid, hasMultiLanguageSources, isLanguageTipEnabled, packagesWithUpdates, true,
+				allSources, isExtensionsLoading, isGrid, hasMultiLanguageSources, isLanguageTipEnabled, packagesWithUpdates, SourceKind.NOVEL,
 			),
+			anime = buildSourcesPage(
+				allSources, isExtensionsLoading, isGrid, hasMultiLanguageSources, isLanguageTipEnabled, packagesWithUpdates, SourceKind.ANIME,
+			),
+			// KEx <--
 		)
 	}.withErrorHandling()
 
@@ -237,13 +248,21 @@ class ExploreViewModel @Inject constructor(
 		hasMultiLanguageSources: Boolean,
 		isLanguageTipEnabled: Boolean,
 		packagesWithUpdates: Set<String>,
-		isNovelShown: Boolean,
+		kind: SourceKind, // <-- KEx
 	): List<ListModel> {
 		val result = ArrayList<ListModel>(sources.size + 2)
-		val shown = sources.filter { it.isNovelSource == isNovelShown }
+		// KEx -->
+		val shown = sources.filter {
+			when (kind) {
+				SourceKind.MANGA -> !it.isNovelSource && !it.isAnimeSource
+				SourceKind.NOVEL -> it.isNovelSource
+				SourceKind.ANIME -> it.isAnimeSource
+			}
+		}
+		// KEx <--
 		when {
 			shown.isNotEmpty() -> shown.mapTo(result) {
-				val pkgName = (it.mangaSource as? MihonMangaSource)?.pkgName
+				val pkgName = (it.mangaSource as? MihonMangaSource)?.pkgName ?: (it.mangaSource as? AniyomiAnimeSourceKEx)?.pkgName // <-- KEx
 				MangaSourceItem(it, isGrid, hasUpdate = pkgName != null && pkgName in packagesWithUpdates)
 			}
 			// Novels can also come from extension APKs now, so the spinner belongs on both tabs —
@@ -251,10 +270,12 @@ class ExploreViewModel @Inject constructor(
 			isExtensionsLoading -> result += LoadingState
 			else -> result += EmptyState(
 				icon = R.drawable.ic_empty_common,
-				textPrimary = if (isNovelShown) {
-					R.string.no_novel_extension_installed
-				} else {
-					R.string.no_external_source_installed
+				// KEx -->
+				textPrimary = when (kind) {
+					SourceKind.NOVEL -> R.string.no_novel_extension_installed
+					SourceKind.ANIME -> R.string.no_anime_extension_installed
+					SourceKind.MANGA -> R.string.no_external_source_installed
+				// KEx <--
 				},
 				textSecondary = R.string.manage_manga_extensions_from_settings_icon,
 				actionStringRes = NO_ACTION_STRING_RES,

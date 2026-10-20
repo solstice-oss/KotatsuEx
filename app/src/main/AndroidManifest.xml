@@ -45,6 +45,17 @@
 		<intent>
 			<action android:name="android.intent.action.TTS_SERVICE" />
 		</intent>
+		<!-- KEx -> !-->
+		<intent>
+			<action android:name="tachiyomi.extension" />
+		</intent>
+		<intent>
+			<action android:name="tachiyomi.novelextension" />
+		</intent>
+		<intent>
+			<action android:name="tachiyomi.animeextension" />
+		</intent>
+		<!-- KEx <- !-->
 	</queries>
 
 	<application
@@ -156,6 +167,9 @@
 		<activity
 			android:name="org.koitharu.kotatsu.mangadex.ui.MangaDexCoversActivityKEx"
 			android:label="@string/mangadex_covers" />
+		<activity
+			android:name="org.koitharu.kotatsu.player.ui.PlayerActivityKEx"
+			android:label="@string/label_video_player" />
 		<!-- KEx <- !-->
 		<activity
 			android:name="org.koitharu.kotatsu.browser.BrowserActivity"

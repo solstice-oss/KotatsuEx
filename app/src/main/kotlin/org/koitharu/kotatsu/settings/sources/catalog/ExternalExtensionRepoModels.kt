@@ -84,7 +84,7 @@ fun extensionDisplayName(name: String): String {
 	return result.trim()
 }
 
-private val VENDOR_NAME_PREFIXES = listOf("Tachiyomi: ", "Tsundoku: ", "Mihon: ")
+private val VENDOR_NAME_PREFIXES = listOf("Tachiyomi: ", "Tsundoku: ", "Mihon: ", "Aniyomi: ") // <-- KEx
 
 /** Package prefix every Tsundoku novel extension uses; the marker for indexes without `isNovel`. */
 private const val NOVEL_EXTENSION_PACKAGE_PREFIX = "eu.kanade.tachiyomi.novelextension"
@@ -98,14 +98,10 @@ val ExternalExtensionRepoEntry.isNovelExtension: Boolean
 	get() = isLnPlugin || isNovel || packageName.startsWith(NOVEL_EXTENSION_PACKAGE_PREFIX)
 
 /** What a store publishes. Derived from its catalog. */
-enum class ExtensionStoreKind { MANGA, NOVEL, MIXED }
+enum class ExtensionStoreKind { MANGA, NOVEL, ANIME, MIXED } // <-- KEx
 
 /** Null while the catalog is empty, i.e. the store is still being checked or is unreachable. */
-fun List<ExternalExtensionRepoEntry>.extensionStoreKind(): ExtensionStoreKind? = when (count { it.isNovelExtension }) {
-	0 -> if (isEmpty()) null else ExtensionStoreKind.MANGA
-	size -> ExtensionStoreKind.NOVEL
-	else -> ExtensionStoreKind.MIXED
-}
+fun List<ExternalExtensionRepoEntry>.extensionStoreKind(): ExtensionStoreKind? = extensionStoreKindKEx() // <-- KEx
 
 // --- Newer "extension store" index format (Mihon #3349+): a single object, served either as JSON or
 // protobuf (index.pb), optionally gzip-compressed, optionally with its extension list in a separate

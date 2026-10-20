@@ -168,7 +168,10 @@ fun exploreSourceListItemAD(
 	bind {
 		binding.textViewTitle.text = item.source.getTitle(context)
 		binding.textViewTitle.drawableStart = if (item.source.isPinned) iconPinned else null
-		binding.textViewSubtitle.text = item.source.getSummary(context) +
+		// KEx -->
+		val summary = item.source.getSummary(context) ?: ""
+		binding.textViewSubtitle.text = summary +
+		// KEx <--
 			(item.source.mangaSource as? MihonMangaSource)?.contentWarning?.descriptionSuffix(context).orEmpty()
 		updateBadge = binding.imageViewIcon.bindBadge(updateBadge, if (item.hasUpdate) "" else null)
 		// Re-applied after layout too, like the Manage extensions rows: the group restyles its children
@@ -204,13 +207,20 @@ fun exploreSourceGridItemAD(
 
 	bind {
 		val title = item.source.getTitle(context)
+		// KEx -->
+		val summary = item.source.getSummary(context)
+		// KEx <--
 		itemView.setTooltipCompat(
 			buildSpannedString {
 				bold {
 					append(title)
 				}
-				appendLine()
-				append(item.source.getSummary(context))
+				// KEx -->
+				if (!summary.isNullOrEmpty()) {
+					appendLine()
+					append(summary)
+				}
+				// KEx <--
 			},
 		)
 		binding.textViewTitle.text = title

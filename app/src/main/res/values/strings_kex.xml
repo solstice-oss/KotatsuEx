@@ -56,4 +56,9 @@
 	<string name="action_retry">Retry</string>
 	<string name="cover_item_description">Volume %1$s cover</string>
 	<string name="cover_item_default_description">Cover %1$d</string>
+
+	<!-- Aniyomi Extensions support -->
+	<string name="store_kind_anime">Anime</string>
+	<string name="no_anime_extension_installed">No anime extensions installed</string>
+	<string name="label_video_player">Video player</string>
 </resources>

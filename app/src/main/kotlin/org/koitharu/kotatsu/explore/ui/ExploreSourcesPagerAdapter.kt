@@ -15,7 +15,7 @@ class ExploreSourcesPagerAdapter(
 	private val onPageCreated: (recyclerView: RecyclerView, position: Int) -> Unit,
 ) : RecyclerView.Adapter<ExploreSourcesPagerAdapter.PageHolder>() {
 
-	override fun getItemCount() = 2
+	override fun getItemCount() = 3 // <-- KEx
 
 	override fun getItemViewType(position: Int) = position
 

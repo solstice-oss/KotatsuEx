@@ -71,8 +71,8 @@ class ExploreFragment :
 	private var manageBadge: BadgeDrawable? = null
 
 	/** Page lists, indexed by page position. Both are created up-front by the pager. */
-	private val pages = arrayOfNulls<RecyclerView>(2)
-	private val pageAdapters = arrayOfNulls<ExploreAdapter>(2)
+	private val pages = arrayOfNulls<RecyclerView>(3) // <-- KEx
+	private val pageAdapters = arrayOfNulls<ExploreAdapter>(3) // <-- KEx
 	private var barsInsets: Insets = Insets.NONE
 	private var isMeasuringPages = false
 
@@ -167,16 +167,18 @@ class ExploreFragment :
 		pages[position] = recyclerView
 		pageAdapters[position] = adapter
 		viewModel.sources.observe(viewLifecycleOwner) { content ->
-			adapter.emit(content[isNovelAt(position)])
+			adapter.emit(content.getForTab(position)) // <-- KEx
 			recyclerView.post(::updatePagerHeight)
 		}
 	}
 
-	/** Which kind the page at [position] shows right now — the only place the tab order is decided. */
-	private fun isNovelAt(position: Int) = (position == 1) != viewModel.isNovelTabFirst
-
-	private fun tabTitle(position: Int) =
-		if (isNovelAt(position)) R.string.store_kind_novel else R.string.store_kind_manga
+	// KEx --> (Replaced)
+	private fun tabTitle(position: Int): Int = when (position) {
+		0 -> R.string.store_kind_manga
+		1 -> R.string.store_kind_novel
+		else -> R.string.store_kind_anime
+	}
+	// KEx <--
 
 	/**
 	 * Long-pressing a tab offers to swap the two. Both pages already exist, so the swap is just a
@@ -213,7 +215,7 @@ class ExploreFragment :
 		val sources = viewModel.sources.value
 		viewLifecycleOwner.lifecycleScope.launch {
 			pageAdapters.forEachIndexed { index, adapter ->
-				adapter?.emit(sources[isNovelAt(index)])
+				adapter?.emit(sources.getForTab(index)) // <-- KEx
 			}
 			pages.forEach { it?.scrollToPosition(0) }
 			viewBinding?.pager?.post(::updatePagerHeight)
