@@ -192,6 +192,46 @@ class PlayerViewModelKEx @Inject constructor(
 		}
 	}
 
+	fun play() {
+		player?.play()
+	}
+
+	fun pause() {
+		player?.pause()
+	}
+
+	fun hasPreviousChapter(): Boolean {
+		val list = _chapters.value
+		val current = _currentChapter.value ?: return false
+		val index = list.indexOfFirst { it.id == current.id }
+		return index > 0
+	}
+
+	fun hasNextChapter(): Boolean {
+		val list = _chapters.value
+		val current = _currentChapter.value ?: return false
+		val index = list.indexOfFirst { it.id == current.id }
+		return index >= 0 && index < list.size - 1
+	}
+
+	fun playPreviousChapter() {
+		val list = _chapters.value
+		val current = _currentChapter.value ?: return
+		val index = list.indexOfFirst { it.id == current.id }
+		if (index > 0) {
+			playChapter(list[index - 1])
+		}
+	}
+
+	fun playNextChapter() {
+		val list = _chapters.value
+		val current = _currentChapter.value ?: return
+		val index = list.indexOfFirst { it.id == current.id }
+		if (index >= 0 && index < list.size - 1) {
+			playChapter(list[index + 1])
+		}
+	}
+
 	fun seekTo(positionMs: Long) {
 		player?.seekTo(positionMs)
 	}
@@ -214,7 +254,6 @@ class PlayerViewModelKEx @Inject constructor(
 	}
 
 	override fun onCleared() {
-		super.onCleared()
 		player?.release()
 		player = null
 	}

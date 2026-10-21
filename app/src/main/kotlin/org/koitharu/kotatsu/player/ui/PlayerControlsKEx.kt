@@ -4,8 +4,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,11 +20,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.FastForward
-import androidx.compose.material.icons.filled.FastRewind
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
@@ -68,21 +67,25 @@ fun PlayerControlsKEx(
 	speed: Float,
 	chapters: List<MangaChapter>,
 	currentChapter: MangaChapter?,
+	hasPreviousChapter: Boolean,
+	hasNextChapter: Boolean,
 	topInset: Dp = 0.dp,
 	bottomInset: Dp = 0.dp,
 	onTogglePlayPause: () -> Unit,
 	onSeekTo: (Long) -> Unit,
-	onRewind10: () -> Unit,
-	onForward10: () -> Unit,
+	onPreviousChapter: () -> Unit,
+	onNextChapter: () -> Unit,
 	onSelectVideo: (Video) -> Unit,
 	onSelectSpeed: (Float) -> Unit,
 	onSelectChapter: (MangaChapter) -> Unit,
+	onEpisodesClick: () -> Unit,
+	onEpisodesDismissed: () -> Unit,
 	onBack: () -> Unit,
-	onBackgroundClick: () -> Unit,
 	modifier: Modifier = Modifier,
 ) {
 	var showQualitySheet by remember { mutableStateOf(false) }
 	var showSpeedSheet by remember { mutableStateOf(false) }
+	var showEpisodesSheet by remember { mutableStateOf(false) }
 
 	AnimatedVisibility(
 		visible = isVisible,
@@ -96,12 +99,7 @@ fun PlayerControlsKEx(
 		Box(
 			modifier = Modifier
 				.fillMaxSize()
-				.background(Color.Black.copy(alpha = 0.45f))
-				.clickable(
-					interactionSource = remember { MutableInteractionSource() },
-					indication = null,
-					onClick = onBackgroundClick,
-				),
+				.background(Color.Black.copy(alpha = 0.45f)),
 		) {
 			// Top Bar
 			Row(
@@ -134,6 +132,20 @@ fun PlayerControlsKEx(
 						)
 					}
 				}
+				if (chapters.isNotEmpty()) {
+					IconButton(
+						onClick = {
+							onEpisodesClick()
+							showEpisodesSheet = true
+						},
+					) {
+						Icon(
+							imageVector = Icons.AutoMirrored.Filled.List,
+							contentDescription = "Episodes",
+							tint = Color.White,
+						)
+					}
+				}
 				if (videos.isNotEmpty()) {
 					IconButton(onClick = { showQualitySheet = true }) {
 						Icon(
@@ -159,14 +171,15 @@ fun PlayerControlsKEx(
 				verticalAlignment = Alignment.CenterVertically,
 			) {
 				IconButton(
-					onClick = onRewind10,
-					modifier = Modifier.size(48.dp),
+					onClick = onPreviousChapter,
+					enabled = hasPreviousChapter,
+					modifier = Modifier.size(56.dp),
 				) {
 					Icon(
-						imageVector = Icons.Default.FastRewind,
-						contentDescription = "-10s",
-						tint = Color.White,
-						modifier = Modifier.size(32.dp),
+						imageVector = Icons.Default.SkipPrevious,
+						contentDescription = "Previous Episode",
+						tint = if (hasPreviousChapter) Color.White else Color.White.copy(alpha = 0.38f),
+						modifier = Modifier.size(36.dp),
 					)
 				}
 
@@ -187,14 +200,15 @@ fun PlayerControlsKEx(
 				}
 
 				IconButton(
-					onClick = onForward10,
-					modifier = Modifier.size(48.dp),
+					onClick = onNextChapter,
+					enabled = hasNextChapter,
+					modifier = Modifier.size(56.dp),
 				) {
 					Icon(
-						imageVector = Icons.Default.FastForward,
-						contentDescription = "+10s",
-						tint = Color.White,
-						modifier = Modifier.size(32.dp),
+						imageVector = Icons.Default.SkipNext,
+						contentDescription = "Next Episode",
+						tint = if (hasNextChapter) Color.White else Color.White.copy(alpha = 0.38f),
+						modifier = Modifier.size(36.dp),
 					)
 				}
 			}
@@ -234,6 +248,61 @@ fun PlayerControlsKEx(
 					),
 					modifier = Modifier.fillMaxWidth(),
 				)
+			}
+		}
+
+		// Episodes Bottom Sheet
+		if (showEpisodesSheet) {
+			ModalBottomSheet(
+				onDismissRequest = {
+					showEpisodesSheet = false
+					onEpisodesDismissed()
+				},
+				containerColor = MaterialTheme.colorScheme.surfaceContainer,
+				contentColor = MaterialTheme.colorScheme.onSurface,
+			) {
+				Column(modifier = Modifier.padding(16.dp)) {
+					Text(
+						text = "Episodes",
+						style = MaterialTheme.typography.titleMedium,
+						fontWeight = FontWeight.Bold,
+						color = MaterialTheme.colorScheme.onSurface,
+						modifier = Modifier.padding(bottom = 12.dp),
+					)
+					LazyColumn {
+						items(chapters) { chapter ->
+							val isSelected = chapter.id == currentChapter?.id
+							Surface(
+								onClick = {
+									onSelectChapter(chapter)
+									showEpisodesSheet = false
+									onEpisodesDismissed()
+								},
+								shape = RoundedCornerShape(12.dp),
+								color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+								contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+								modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+							) {
+								Row(
+									modifier = Modifier
+										.fillMaxWidth()
+										.padding(16.dp),
+									verticalAlignment = Alignment.CenterVertically,
+								) {
+									Text(
+										text = chapter.title.orEmpty().ifBlank {
+											chapter.numberString()?.let { "Episode $it" } ?: "Chapter ${chapter.number}"
+										},
+										style = MaterialTheme.typography.bodyMedium,
+										fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+										color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+										modifier = Modifier.weight(1f),
+									)
+								}
+							}
+						}
+					}
+				}
 			}
 		}
 
