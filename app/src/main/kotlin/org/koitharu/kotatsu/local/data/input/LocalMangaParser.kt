@@ -30,9 +30,11 @@ import org.koitharu.kotatsu.core.util.ext.toListSorted
 import org.koitharu.kotatsu.core.util.ext.toZipUri
 import org.koitharu.kotatsu.local.data.MangaIndex
 import org.koitharu.kotatsu.local.data.hasEpubExtension
+import org.koitharu.kotatsu.local.data.hasVideoExtension
 import org.koitharu.kotatsu.local.data.hasZipExtension
 import org.koitharu.kotatsu.local.data.hasMangaContent
 import org.koitharu.kotatsu.local.data.isEpubFile
+import org.koitharu.kotatsu.local.data.isVideoFile
 import org.koitharu.kotatsu.local.data.isZipArchive
 import org.koitharu.kotatsu.local.data.output.LocalMangaOutput.Companion.ENTRY_NAME_INDEX
 import org.koitharu.kotatsu.local.domain.model.LocalManga
@@ -61,6 +63,47 @@ class LocalMangaParser(private val uri: Uri) {
 	private val rootFile: File = File(uri.schemeSpecificPart)
 
 	suspend fun getManga(withDetails: Boolean): LocalManga = runInterruptible(Dispatchers.IO) {
+		// KEx -->
+		if (rootFile.isVideoFile) {
+			val title = rootFile.name.fileNameToTitle()
+			return@runInterruptible LocalManga(
+				Manga(
+					id = rootFile.absolutePath.longHashCode(),
+					title = title,
+					url = rootFile.toUri().toString(),
+					publicUrl = rootFile.toUri().toString(),
+					source = LocalMangaSource,
+					coverUrl = null,
+					chapters = if (withDetails) {
+						listOf(
+							MangaChapter(
+								id = rootFile.absolutePath.longHashCode(),
+								title = title,
+								number = 1f,
+								volume = 0,
+								url = rootFile.toUri().toString(),
+								scanlator = null,
+								uploadDate = rootFile.lastModified(),
+								branch = null,
+								source = LocalMangaSource,
+							),
+						)
+					} else {
+						null
+					},
+					altTitles = emptySet(),
+					rating = -1f,
+					contentRating = null,
+					tags = emptySet(),
+					state = null,
+					authors = emptySet(),
+					largeCoverUrl = null,
+					description = null,
+				),
+				rootFile,
+			)
+		}
+		// KEx <--
 		val epubFiles = when {
 			rootFile.isEpubFile -> listOf(rootFile)
 			rootFile.isDirectory -> rootFile.listFiles { f: File -> f.isEpubFile }
@@ -120,6 +163,9 @@ class LocalMangaParser(private val uri: Uri) {
 									!fileSystem.isRegularFile(path) -> null
 									path.isImage() -> path.parent
 									hasZipExtension(path.name) -> path
+									// KEx -->
+									hasVideoExtension(path.name) -> path
+									// KEx <--
 									else -> null
 								}
 							}.sortedWith(compareBy(AlphanumComparator()) { x -> x.toString() })
@@ -382,7 +428,7 @@ class LocalMangaParser(private val uri: Uri) {
 		@Blocking
 		fun getOrNull(file: File): LocalMangaParser? = if (
 			file.canRead() &&
-			(file.isZipArchive || file.isEpubFile || (file.isDirectory && file.hasMangaContent()))
+			(file.isZipArchive || file.isEpubFile || file.isVideoFile || (file.isDirectory && file.hasMangaContent())) // <-- KEx
 		) {
 			LocalMangaParser(file)
 		} else {

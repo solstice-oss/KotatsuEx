@@ -75,7 +75,7 @@ fun hasImageExtension(string: String): Boolean {
 }
 
 private val File.isMangaContentFile: Boolean
-	get() = (isSupportedArchive(name) && !hasRarExtension(name)) || hasImageExtension(name)
+	get() = (isSupportedArchive(name) && !hasRarExtension(name)) || hasImageExtension(name) || isVideoFile // <-- KEx
 
 val File.isZipArchive: Boolean
 	get() = isFile && isZipExtension(extension)

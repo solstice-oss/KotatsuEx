@@ -58,6 +58,8 @@ import org.koitharu.kotatsu.core.util.ext.toUriOrNull
 import org.koitharu.kotatsu.core.util.ext.withArgs
 import org.koitharu.kotatsu.details.ui.DetailsExpressiveActivity
 import org.koitharu.kotatsu.details.ui.pager.ChaptersPagesSheet
+import org.koitharu.kotatsu.local.data.isVideo
+import org.koitharu.kotatsu.reader.ui.ReaderState
 import org.koitharu.kotatsu.details.ui.related.RelatedMangaActivity
 import org.koitharu.kotatsu.details.ui.scrobbling.ScrobblingInfoSheet
 import org.koitharu.kotatsu.download.ui.dialog.DownloadDialogFragment
@@ -200,6 +202,27 @@ class AppRouter private constructor(
 
     fun openReader(intent: ReaderIntent, anchor: View? = null) {
         val activityIntent = intent.intent
+        // KEx -->
+        val parcelableManga = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            activityIntent.getParcelableExtra(KEY_MANGA, ParcelableManga::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            activityIntent.getParcelableExtra(KEY_MANGA)
+        }
+        val manga = parcelableManga?.manga
+        if (manga != null && manga.isVideo) {
+            val state = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                activityIntent.getParcelableExtra(ReaderIntent.EXTRA_STATE, ReaderState::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                activityIntent.getParcelableExtra(ReaderIntent.EXTRA_STATE)
+            }
+            val chapterId = state?.chapterId?.takeIf { it != -1L }
+                ?: activityIntent.getLongExtra(KEY_ID, -1L).takeIf { it != -1L }
+            openPlayer(manga, chapterId)
+            return
+        }
+        // KEx <--
         if (settings.isReaderMultiTaskEnabled && activityIntent.data != null) {
             activityIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT)
         }
@@ -226,6 +249,16 @@ class AppRouter private constructor(
             Intent(contextOrNull() ?: return, MangaDexCoversActivityKEx::class.java)
                 .putExtra(KEY_MANGA, ParcelableManga(manga, withDescription = false)),
         )
+    }
+
+    fun openPlayer(manga: Manga, chapterId: Long? = null) {
+        val context = contextOrNull() ?: return
+        val intent = Intent(context, org.koitharu.kotatsu.player.ui.PlayerActivityKEx::class.java)
+            .putExtra(KEY_MANGA, ParcelableManga(manga))
+        if (chapterId != null && chapterId != -1L) {
+            intent.putExtra(KEY_ID, chapterId)
+        }
+        startActivity(intent)
     }
     // KEx <--
 

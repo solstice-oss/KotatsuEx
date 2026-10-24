@@ -515,7 +515,7 @@
     <string name="extension_download_failed">Extension download failed. Check your connection and try again.</string>
     <string name="user_agent">UserAgent header</string>
     <string name="settings_apply_restart_required">Please restart the application to apply these changes</string>
-    <string name="comics_archive_import_description">Select one or more .cbz, .cbr, .zip, .pdf or .epub files. Each file is imported as a separate title: PDFs are converted to comic pages, EPUB books keep their text chapters.</string>
+    <string name="comics_archive_import_description">Select one or more .cbz, .cbr, .zip, .pdf, .epub or video files. Each file is imported as a separate title: PDFs are converted to comic pages, EPUB books keep their text chapters.</string>
     <string name="folder_with_images_import_description">Select a folder to import as a single title. PDF files inside become chapters, EPUB files become volumes, otherwise each archive or subfolder becomes a chapter.</string>
     <string name="epub_text_size">Text size</string>
 	<string name="epub_font_family">Font</string>

@@ -10,6 +10,7 @@ import org.koitharu.kotatsu.core.util.ext.printStackTraceDebug
 import org.koitharu.kotatsu.local.data.MangaIndex
 import org.koitharu.kotatsu.local.data.hasImageExtension
 import org.koitharu.kotatsu.local.data.hasRarExtension
+import org.koitharu.kotatsu.local.data.hasVideoExtension
 import org.koitharu.kotatsu.local.data.hasZipExtension
 import org.koitharu.kotatsu.local.data.output.LocalMangaOutput.Companion.ENTRY_NAME_INDEX
 import org.koitharu.kotatsu.parsers.model.Manga
@@ -108,9 +109,9 @@ private fun DocumentFile.looksLikeChapter(): Boolean {
 		return false
 	}
 	return if (isDirectory) {
-		listFiles().any { it.isFile && (hasImageExtension(it.name.orEmpty()) || it.name == COMIC_INFO_FILE) }
+		listFiles().any { it.isFile && (hasImageExtension(it.name.orEmpty()) || it.name == COMIC_INFO_FILE || hasVideoExtension(it.name.orEmpty())) } // <-- KEx
 	} else {
-		hasZipExtension(name) || hasRarExtension(name)
+		hasZipExtension(name) || hasRarExtension(name) || hasVideoExtension(name) // <-- KEx
 	}
 }
 

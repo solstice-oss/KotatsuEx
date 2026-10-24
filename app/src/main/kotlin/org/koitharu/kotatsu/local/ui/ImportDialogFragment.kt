@@ -35,6 +35,7 @@ import org.koitharu.kotatsu.core.util.ext.resolveName
 import org.koitharu.kotatsu.core.util.ext.tryLaunch
 import org.koitharu.kotatsu.local.data.LocalStorageManager
 import org.koitharu.kotatsu.local.data.isSupportedArchive
+import org.koitharu.kotatsu.local.data.isSupportedVideo
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -63,7 +64,7 @@ class ImportDialogFragment : ComposeAlertDialogFragment() {
 			) {
 				launch(
 					importFileCall.tryLaunch(
-						arrayOf("application/zip", "application/x-cbz", "application/vnd.comicbook-rar", "application/x-cbr", "application/pdf", "application/epub+zip", "*/*"),
+						arrayOf("application/zip", "application/x-cbz", "application/vnd.comicbook-rar", "application/x-cbr", "application/pdf", "application/epub+zip", "video/*", "video/mp4", "video/x-matroska", "video/webm", "video/avi", "*/*"), // <-- KEx
 					),
 				)
 			}
@@ -156,7 +157,7 @@ class ImportDialogFragment : ComposeAlertDialogFragment() {
 	private fun Uri.isSupportedArchiveFile(): Boolean {
 		return runCatching {
 			val name = storageManager.contentResolver.resolveName(this)
-			!name.isNullOrBlank() && isSupportedArchive(name)
+			!name.isNullOrBlank() && (isSupportedArchive(name) || isSupportedVideo(name)) // <-- KEx
 		}.getOrDefault(false)
 	}
 }

@@ -2,7 +2,6 @@ package org.koitharu.kotatsu.player.ui
 
 import android.content.Context
 import android.net.Uri
-import android.util.Log
 import androidx.annotation.OptIn
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -12,7 +11,6 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import eu.kanade.tachiyomi.animesource.model.Video
@@ -26,16 +24,17 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import org.koitharu.kotatsu.core.cache.MemoryContentCache
 import org.koitharu.kotatsu.core.network.MangaHttpClient
-import org.koitharu.kotatsu.core.parser.MangaDataRepository
+import org.koitharu.kotatsu.core.parser.MangaRepository
 import org.koitharu.kotatsu.history.data.HistoryRepository
 import org.koitharu.kotatsu.parsers.model.Manga
 import org.koitharu.kotatsu.parsers.model.MangaChapter
+import org.koitharu.kotatsu.parsers.util.runCatchingCancellable
 import javax.inject.Inject
 
 @HiltViewModel
 class PlayerViewModelKEx @Inject constructor(
 	@ApplicationContext private val context: Context,
-	private val dataRepository: MangaDataRepository,
+	private val mangaRepositoryFactory: MangaRepository.Factory,
 	private val historyRepository: HistoryRepository,
 	@MangaHttpClient private val httpClient: OkHttpClient,
 	private val contentCache: MemoryContentCache,
@@ -73,15 +72,31 @@ class PlayerViewModelKEx @Inject constructor(
 	private val _chapters = MutableStateFlow<List<MangaChapter>>(emptyList())
 	val chapters: StateFlow<List<MangaChapter>> = _chapters.asStateFlow()
 
+	private var hasPendingSeek = false
+	private var pendingSeekPercent = 0f
+
 	init {
 		viewModelScope.launch {
+			var count = 0
 			while (true) {
 				delay(500)
 				player?.let { p ->
-					_currentPosition.value = p.currentPosition.coerceAtLeast(0L)
-					_duration.value = p.duration.coerceAtLeast(0L)
+					val curPos = p.currentPosition.coerceAtLeast(0L)
+					val dur = p.duration.coerceAtLeast(0L)
+					_currentPosition.value = curPos
+					_duration.value = dur
 					_bufferedPosition.value = p.bufferedPosition.coerceAtLeast(0L)
 					_isPlaying.value = p.isPlaying
+
+					if (hasPendingSeek && dur > 0L && pendingSeekPercent > 0f) {
+						p.seekTo((pendingSeekPercent * dur).toLong())
+						hasPendingSeek = false
+					}
+
+					count++
+					if (count % 4 == 0) {
+						saveHistory()
+					}
 				}
 			}
 		}
@@ -90,13 +105,7 @@ class PlayerViewModelKEx @Inject constructor(
 	fun initPlayer(manga: Manga, initialChapterId: Long?) {
 		_manga.value = manga
 		viewModelScope.launch(Dispatchers.IO) {
-			/*val details = if (manga.source is AniyomiAnimeSourceKEx) {
-				val repo = AniyomiAnimeRepositoryKEx(manga.source as AniyomiAnimeSourceKEx, contentCache, context)
-				runCatching { repo.getDetails(manga) }.getOrDefault(manga)
-			} else {
-				manga
-			}*/
-			val details = manga // TODO temp
+			val details = runCatchingCancellable { mangaRepositoryFactory.create(manga.source).getDetails(manga) }.getOrDefault(manga)
 			_manga.value = details
 			val chList = details.chapters.orEmpty()
 			_chapters.value = chList
@@ -126,13 +135,21 @@ class PlayerViewModelKEx @Inject constructor(
 		_currentChapter.value = chapter
 		viewModelScope.launch(Dispatchers.IO) {
 			val m = _manga.value ?: return@launch
-			/*val resolvedVideos = if (m.source is AniyomiAnimeSourceKEx) {
-				val repo = AniyomiAnimeRepositoryKEx(m.source as AniyomiAnimeSourceKEx, contentCache, context)
-				repo.getVideoList(chapter)
+			val savedHistory = runCatchingCancellable { historyRepository.getOne(m) }.getOrNull()
+			if (savedHistory != null && savedHistory.chapterId == chapter.id && savedHistory.percent > 0f && savedHistory.percent < 0.95f) {
+				hasPendingSeek = true
+				pendingSeekPercent = savedHistory.percent
 			} else {
-				listOf(Video(videoUrl = chapter.url, videoTitle = "Local Video"))
-			}*/
-			val resolvedVideos = listOf(Video(videoUrl = chapter.url, videoTitle = "Local Video")) // TODO temp
+				hasPendingSeek = false
+				pendingSeekPercent = 0f
+			}
+
+			val resolvedVideos = listOf(
+				Video(
+					videoUrl = chapter.url,
+					videoTitle = chapter.title.orEmpty().ifBlank { "Episode ${chapter.number}" },
+				),
+			)
 
 			_videos.value = resolvedVideos
 			val firstVideo = resolvedVideos.firstOrNull()
@@ -252,7 +269,30 @@ class PlayerViewModelKEx @Inject constructor(
 		player?.playbackParameters = PlaybackParameters(speed)
 	}
 
+	private fun saveHistory() {
+		val m = _manga.value ?: return
+		val ch = _currentChapter.value ?: return
+		val dur = _duration.value
+		val pos = _currentPosition.value
+		if (dur > 0L) {
+			val percent = (pos.toFloat() / dur.toFloat()).coerceIn(0f, 1f)
+			viewModelScope.launch(Dispatchers.IO) {
+				runCatchingCancellable {
+					historyRepository.addOrUpdate(
+						manga = m,
+						chapterId = ch.id,
+						page = 0,
+						scroll = 0,
+						percent = percent,
+						force = false,
+					)
+				}
+			}
+		}
+	}
+
 	override fun onCleared() {
+		saveHistory()
 		player?.release()
 		player = null
 	}

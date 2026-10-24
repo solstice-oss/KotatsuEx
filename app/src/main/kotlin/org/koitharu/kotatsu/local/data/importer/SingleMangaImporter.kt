@@ -26,6 +26,7 @@ import org.koitharu.kotatsu.core.util.ext.resolveName
 import org.koitharu.kotatsu.core.util.ext.writeAllCancellable
 import org.koitharu.kotatsu.local.data.hasPdfExtension
 import org.koitharu.kotatsu.local.data.hasRarExtension
+import org.koitharu.kotatsu.local.data.isSupportedVideo
 import org.koitharu.kotatsu.local.data.LocalStorageChanges
 import org.koitharu.kotatsu.local.data.LocalStorageManager
 import org.koitharu.kotatsu.local.data.isSupportedArchive
@@ -65,7 +66,7 @@ class SingleMangaImporter @Inject constructor(
 	private suspend fun importFile(uri: Uri): LocalManga = withContext(Dispatchers.IO) {
 		val contentResolver = storageManager.contentResolver
 		val name = contentResolver.resolveName(uri) ?: throw IOException("Cannot fetch name from uri: $uri")
-		if (!isSupportedArchive(name)) {
+		if (!isSupportedArchive(name) && !isSupportedVideo(name)) { // <-- KEx
 			throw UnsupportedFileException("Unsupported file $name on $uri")
 		}
 		val dest = if (hasPdfExtension(name)) {
