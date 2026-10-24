@@ -16,8 +16,6 @@ import org.koitharu.kotatsu.core.prefs.SourceSettings
 import org.koitharu.kotatsu.core.prefs.observeAsFlow
 import org.koitharu.kotatsu.core.ui.util.ReversibleHandle
 import org.koitharu.kotatsu.extensions.runtime.getExternalExtensionLanguageAutonym
-import org.koitharu.kotatsu.aniyomi.AniyomiExtensionManagerKEx
-import org.koitharu.kotatsu.aniyomi.model.AniyomiAnimeSourceKEx
 import org.koitharu.kotatsu.lnreader.LnPluginManager
 import org.koitharu.kotatsu.lnreader.model.LnMangaSource
 import org.koitharu.kotatsu.lnreader.model.langCode
@@ -49,9 +47,6 @@ class MangaSourcesRepository @Inject constructor(
 	private val settings: AppSettings,
 	private val mihonExtensionManager: MihonExtensionManager? = null,
 	private val lnPluginManager: LnPluginManager? = null,
-	// KEx -->
-	private val aniyomiExtensionManager: AniyomiExtensionManagerKEx? = null,
-	// KEx <--
 ) {
 
 	private val usageRefresh = MutableStateFlow(0)
@@ -96,25 +91,16 @@ class MangaSourcesRepository @Inject constructor(
 	fun observeEnabledSources(): Flow<List<MangaSourceInfo>> = combine(
 		observeMihonSources(),
 		observeLnSources(),
-		// KEx -->
-		observeAniyomiSources(),
-		// KEx <--
 		settings.observeAsFlow(AppSettings.KEY_SOURCES_ORDER) { sourcesSortOrder },
 		usageRefresh,
 		pinnedRefresh,
-	) { args: Array<Any?> ->
-		@Suppress("UNCHECKED_CAST") // KEx >> (Modified)
-		val mihon = args[0] as List<MangaSource>
-		@Suppress("UNCHECKED_CAST")
-		val ln = args[1] as List<MangaSource>
-		@Suppress("UNCHECKED_CAST")
-		val aniyomi = args[2] as List<MangaSource>
-		buildSortedSourceInfoList(mihon + ln + aniyomi) // KEx << (Modified)
+	) { mihon, ln, _, _, _ ->
+		buildSortedSourceInfoList(mihon + ln)
 	}.distinctUntilChanged()
 
 	fun observeAll(): Flow<List<Pair<MangaSource, Boolean>>> =
-		combine(observeMihonSources(), observeLnSources(), observeAniyomiSources()) { mihon, ln, aniyomi -> // <-- KEx
-			(mihon + ln + aniyomi).map { it to true } // <-- KEx
+		combine(observeMihonSources(), observeLnSources()) { mihon, ln ->
+			(mihon + ln).map { it to true }
 		}
 
 	fun setIsPinned(sources: Collection<MangaSource>, isPinned: Boolean): ReversibleHandle {
@@ -305,35 +291,7 @@ class MangaSourcesRepository @Inject constructor(
 		}.distinctUntilChanged()
 	}
 
-	// KEx -->
-	fun getAniyomiSources(): List<AniyomiAnimeSourceKEx> {
-		val manager = aniyomiExtensionManager ?: return emptyList()
-		manager.initialize()
-		val contentFilter = settings.contentFilter
-		val hiddenPackages = settings.mihonHiddenPackages
-		val hiddenLangs = settings.hiddenSourceLanguages
-		return manager.getAniyomiAnimeSources()
-			.filter { it.contentWarning <= contentFilter }
-			.filterNot { it.pkgName in hiddenPackages }
-			.filterNot { it.language in hiddenLangs }
-	}
-
-	fun observeAniyomiSources(): Flow<List<AniyomiAnimeSourceKEx>> {
-		val manager = aniyomiExtensionManager ?: return kotlinx.coroutines.flow.flowOf(emptyList())
-		manager.initialize()
-		return combine(
-			manager.installedExtensions,
-			manager.isLoading,
-			settings.observeAsFlow(AppSettings.KEY_CONTENT_FILTER) { contentFilter },
-			settings.observeAsFlow(AppSettings.KEY_MIHON_HIDDEN_PACKAGES) { mihonHiddenPackages },
-			settings.observeAsFlow(AppSettings.KEY_HIDDEN_SOURCE_LANGUAGES) { hiddenSourceLanguages },
-		) { _: Array<Any?> ->
-			getAniyomiSources()
-		}.distinctUntilChanged()
-	}
-	// KEx <--
-
-	private fun getAllEnabledSources(): List<MangaSource> = getMihonSources() + getLnSources() + getAniyomiSources() // <-- KEx
+	private fun getAllEnabledSources(): List<MangaSource> = getMihonSources() + getLnSources()
 
 	private fun MangaSource.unwrapLn(): LnMangaSource? = when (this) {
 		is LnMangaSource -> this
@@ -449,16 +407,10 @@ class MangaSourcesRepository @Inject constructor(
 
 	suspend fun reloadMihonSources() {
 		mihonExtensionManager?.loadExtensions()
-		// KEx -->
-		aniyomiExtensionManager?.loadExtensions()
-		// KEx <--
 	}
 
 	suspend fun ensureMihonSourcesLoaded() {
 		mihonExtensionManager?.ensureReady()
-		// KEx -->
-		aniyomiExtensionManager?.ensureReady()
-		// KEx <--
 	}
 
 	private companion object {

@@ -653,19 +653,13 @@ class SourcesCatalogActivity : BaseActivity<ActivitySourcesCatalogBinding>(),
 		val pendingDownload = downloadRequestsById.remove(downloadId)
 		val apkFile = getDownloadedApkFile(pendingDownload?.fileName)
 		val archive = apkFile?.let(::getArchivePackageInfo)
-		// KEx -->
-		val isExtension = archive != null && (
-			MihonExtensionLoader.isPackageAnExtensionStatic(archive) ||
-				org.koitharu.kotatsu.aniyomi.AniyomiExtensionLoaderKEx.isPackageAnExtensionStatic(archive)
-		)
-		// KEx <--
 		if (
 			pendingDownload == null ||
 			apkFile == null ||
 			!apkFile.isFile ||
 			archive == null ||
 			archive.packageName != pendingDownload.packageName ||
-			!isExtension || // <-- KEx
+			!MihonExtensionLoader.isPackageAnExtensionStatic(archive) ||
 			MihonExtensionLoader.getSignatures(archive).isEmpty()
 		) {
 			viewModel.clearExtensionInProgress(pendingDownload?.packageName)

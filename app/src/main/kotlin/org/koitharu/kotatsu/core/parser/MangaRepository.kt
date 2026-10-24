@@ -11,10 +11,6 @@ import org.koitharu.kotatsu.core.model.MissingMangaSource
 import org.koitharu.kotatsu.core.model.MangaSourceInfo
 import org.koitharu.kotatsu.core.model.UnknownMangaSource
 import org.koitharu.kotatsu.local.data.LocalMangaRepository
-import org.koitharu.kotatsu.aniyomi.AniyomiAnimeRepositoryKEx
-import org.koitharu.kotatsu.aniyomi.AniyomiExtensionManagerKEx
-import org.koitharu.kotatsu.aniyomi.LazyAniyomiAnimeRepositoryKEx
-import org.koitharu.kotatsu.aniyomi.model.AniyomiAnimeSourceKEx
 import org.koitharu.kotatsu.lnreader.LnMangaRepository
 import org.koitharu.kotatsu.lnreader.LnPluginManager
 import org.koitharu.kotatsu.lnreader.js.JsHost
@@ -101,9 +97,6 @@ interface MangaRepository {
 		private val localMangaRepository: LocalMangaRepository,
 		private val contentCache: MemoryContentCache,
 		private val mihonExtensionManager: MihonExtensionManager,
-		// KEx -->
-		private val aniyomiExtensionManager: AniyomiExtensionManagerKEx,
-		// KEx <--
 		private val lnPluginManager: LnPluginManager,
 		private val jsHost: JsHost,
 		@ApplicationContext private val context: Context,
@@ -114,20 +107,14 @@ interface MangaRepository {
 		@AnyThread
 		fun create(source: MangaSource): MangaRepository {
 			val unwrapped = resolveFreshSource(unwrap(source))
-			// KEx -->
-			val isMihonMissing = unwrapped is MissingMangaSource && unwrapped.name.startsWith("MIHON_")
-			val isAniyomiMissing = unwrapped is MissingMangaSource && unwrapped.name.startsWith("ANIYOMI_")
-			// KEx <--
+			val isExternalMissing = unwrapped is MissingMangaSource && unwrapped.name.startsWith("MIHON_")
 			when (unwrapped) {
 				LocalMangaSource -> return localMangaRepository
 				UnknownMangaSource -> return EmptyMangaRepository(unwrapped)
 				is MihonMangaSource -> mihonExtensionManager.initialize()
 				is LnMangaSource -> lnPluginManager.initialize()
-				// KEx -->
-				is AniyomiAnimeSourceKEx -> aniyomiExtensionManager.initialize()
-				// KEx <--
 			}
-			if (isMihonMissing) { // <-- KEx
+			if (isExternalMissing) {
 				// Don't reuse a stale `EmptyMangaRepository`: it would throw forever. The
 				// lazy proxy is reusable across resolutions and self-heals once extensions
 				// finish loading, so we keep it cached.
@@ -148,26 +135,6 @@ interface MangaRepository {
 					lazyRepo
 				}
 			}
-			// KEx -->
-			if (isAniyomiMissing) {
-				cache[unwrapped]?.get()?.let { cached ->
-					if (cached !is EmptyMangaRepository) return cached
-				}
-				return synchronized(cache) {
-					cache[unwrapped]?.get()?.let { cached ->
-						if (cached !is EmptyMangaRepository) return cached
-					}
-					val lazyRepo = LazyAniyomiAnimeRepositoryKEx(
-						source = unwrapped as MissingMangaSource,
-						extensionManager = aniyomiExtensionManager,
-						cache = contentCache,
-						context = context,
-					)
-					cache[unwrapped] = WeakReference(lazyRepo)
-					lazyRepo
-				}
-			}
-			// KEx <--
 			cache[unwrapped]?.get()?.let { return it }
 			return synchronized(cache) {
 				cache[unwrapped]?.get()?.let { return it }
@@ -199,12 +166,6 @@ interface MangaRepository {
 				lnPluginManager.initialize()
 				return ResolveMangaSource(source.name)
 			}
-			// KEx -->
-			if (source is MissingMangaSource && source.name.startsWith("ANIYOMI_")) {
-				aniyomiExtensionManager.initialize()
-				return ResolveMangaSource(source.name)
-			}
-			// KEx <--
 			return source
 		}
 
@@ -214,14 +175,6 @@ interface MangaRepository {
 				cache = contentCache,
 				context = context,
 			)
-
-			// KEx -->
-			is AniyomiAnimeSourceKEx -> AniyomiAnimeRepositoryKEx(
-				source = source,
-				cache = contentCache,
-				context = context,
-			)
-			// KEx <--
 
 			is LnMangaSource -> LnMangaRepository(
 				source = source,

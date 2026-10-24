@@ -63,13 +63,10 @@ class MihonExtensionLoader @Inject constructor(
 		 * discovery is identical — the source itself declares `isNovelSource`.
 		 */
 		private const val EXTENSION_FEATURE_NOVEL = "tachiyomi.novelextension"
-		// KEx -->
-		private const val EXTENSION_FEATURE_ANIME = "tachiyomi.animeextension"
-		// KEx <--
-		private val EXTENSION_FEATURES = setOf(EXTENSION_FEATURE, EXTENSION_FEATURE_NOVEL, EXTENSION_FEATURE_ANIME) // <-- KEx
+		private val EXTENSION_FEATURES = setOf(EXTENSION_FEATURE, EXTENSION_FEATURE_NOVEL)
 
 		/** `<namespace>.class` / `.factory` / `.nsfw`, in the order they're tried. */
-		private val METADATA_NAMESPACES = listOf(EXTENSION_FEATURE, EXTENSION_FEATURE_NOVEL, EXTENSION_FEATURE_ANIME) // <-- KEx
+		private val METADATA_NAMESPACES = listOf(EXTENSION_FEATURE, EXTENSION_FEATURE_NOVEL)
 		private val METADATA_SOURCE_CLASS_KEYS = METADATA_NAMESPACES.map { "$it.class" }
 		private val METADATA_SOURCE_FACTORY_KEYS = METADATA_NAMESPACES.map { "$it.factory" }
 		private val METADATA_NSFW_KEYS = METADATA_NAMESPACES.map { "$it.nsfw" }
@@ -240,16 +237,6 @@ class MihonExtensionLoader @Inject constructor(
 		}
 
 		internal fun isPackageAnExtensionStatic(pkgInfo: PackageInfo): Boolean {
-			// KEx -->
-			val pkgName = pkgInfo.packageName.orEmpty()
-			if (pkgName.startsWith("eu.kanade.tachiyomi.extension") ||
-				pkgName.startsWith("eu.kanade.tachiyomi.novelextension") ||
-				pkgName.startsWith("eu.kanade.tachiyomi.animeextension") ||
-				pkgName.startsWith("app.tsundoku.extension")
-			) {
-				return true
-			}
-			// KEx <--
 			val appInfo = pkgInfo.applicationInfo ?: return false
 			val hasFeature = pkgInfo.reqFeatures?.any { it.name in EXTENSION_FEATURES } == true
 			return hasFeature || readSourceClassNames(appInfo.metaData) != null

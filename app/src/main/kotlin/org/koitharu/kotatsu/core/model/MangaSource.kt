@@ -16,8 +16,6 @@ import org.koitharu.kotatsu.core.util.ext.isHttpUrl
 import org.koitharu.kotatsu.extensions.runtime.getExternalExtensionLanguageDisplayName
 import org.koitharu.kotatsu.lnreader.LnPluginManager
 import org.koitharu.kotatsu.lnreader.model.LnMangaSource
-import org.koitharu.kotatsu.aniyomi.AniyomiExtensionManagerKEx
-import org.koitharu.kotatsu.aniyomi.model.AniyomiAnimeSourceKEx
 import org.koitharu.kotatsu.mihon.MihonExtensionLoader
 import org.koitharu.kotatsu.mihon.MihonExtensionManager
 import org.koitharu.kotatsu.mihon.model.MihonMangaSource
@@ -64,15 +62,6 @@ fun MangaSource(name: String?): MangaSource {
 		}
 		return MihonExtensionManager.getByName(name) ?: MissingMangaSource(name)
 	}
-	// KEx -->
-	if (name.startsWith("ANIYOMI_")) {
-		val sourceId = name.removePrefix("ANIYOMI_").substringBefore(':').toLongOrNull()
-		if (sourceId != null) {
-			return AniyomiExtensionManagerKEx.getById(sourceId) ?: MissingMangaSource(name)
-		}
-		return AniyomiExtensionManagerKEx.getByName(name) ?: MissingMangaSource(name)
-	}
-	// KEx <--
 	if (name.startsWith("LN_")) {
 		return LnPluginManager.getByName(name) ?: MissingMangaSource(name)
 	}
@@ -137,15 +126,6 @@ val MangaSource.isNovelSource: Boolean
 		else -> false
 	}
 
-// KEx -->
-val MangaSource.isAnimeSource: Boolean
-	get() = when (val source = unwrap()) {
-		is AniyomiAnimeSourceKEx -> true
-		is MissingMangaSource -> source.name.startsWith("ANIYOMI_")
-		else -> false
-	}
-// KEx <--
-
 @get:StringRes
 val ContentType.titleResId
 	get() = when (this) {
@@ -185,20 +165,6 @@ fun MangaSource.getSummary(context: Context): String? = when (val source = unwra
 		)
 		repoLabel?.let { append(" • ").append(it) }
 	}
-	// KEx -->
-	is AniyomiAnimeSourceKEx -> buildString {
-		append(getExternalExtensionLanguageDisplayName(source.language))
-		runCatching { context.packageManager.getPackageInfo(source.pkgName, 0).versionName }
-			.getOrNull()
-			?.let { append(" • ").append(it) }
-		val settings = AppSettings(context.applicationContext)
-		val repoLabel = settings.getExtensionStoreLabel(
-			source.pkgName,
-			MihonExtensionLoader.getPackageSignatures(context, source.pkgName),
-		)
-		repoLabel?.let { append(" • ").append(it) }
-	}
-	// KEx <--
 	// language • version, mirroring the Mihon line above. Novel plugins have no repo signature.
 	is LnMangaSource -> buildString {
 		append(getExternalExtensionLanguageDisplayName(source.plugin.lang))
@@ -206,7 +172,7 @@ fun MangaSource.getSummary(context: Context): String? = when (val source = unwra
 	}
 
 	is MissingMangaSource -> {
-		if (source.name.startsWith("MIHON_") || source.name.startsWith("LN_") || source.name.startsWith("ANIYOMI_")) { // <-- KEx
+		if (source.name.startsWith("MIHON_") || source.name.startsWith("LN_")) {
 			context.getString(R.string.external_source)
 		} else {
 			null
@@ -220,25 +186,19 @@ fun MangaSource.getTitle(context: Context): String = when (val source = unwrap()
 	LocalMangaSource -> context.getString(R.string.local_storage)
 	is MihonMangaSource -> source.displayName
 	is LnMangaSource -> source.displayName
-	// KEx -->
-	is AniyomiAnimeSourceKEx -> source.displayName
-	// KEx <--
 	is MissingMangaSource -> source.resolveDisplayName(context)
 	else -> context.getString(R.string.unknown)
 }
 
 fun MangaSource.isExternalSource(): Boolean = when (val source = unwrap()) {
-	is MihonMangaSource, is LnMangaSource, is AniyomiAnimeSourceKEx -> true // <-- KEx
-	is MissingMangaSource -> source.name.startsWith("MIHON_") || source.name.startsWith("LN_") || source.name.startsWith("ANIYOMI_") // <-- KEx
+	is MihonMangaSource, is LnMangaSource -> true
+	is MissingMangaSource -> source.name.startsWith("MIHON_") || source.name.startsWith("LN_")
 	else -> false
 }
 
 fun MangaSource.getStoredTitleOrNull(): String? = when (val source = unwrap()) {
 	is MihonMangaSource -> source.displayName
 	is LnMangaSource -> source.displayName
-	// KEx -->
-	is AniyomiAnimeSourceKEx -> source.displayName
-	// KEx <--
 	is MissingMangaSource -> source.cachedDisplayNameOrNull() ?: source.liveDisplayNameOrNull()
 	LocalMangaSource -> null
 	else -> null

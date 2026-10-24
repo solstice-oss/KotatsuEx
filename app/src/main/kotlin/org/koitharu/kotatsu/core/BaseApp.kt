@@ -79,11 +79,6 @@ open class BaseApp : Application(), Configuration.Provider {
 	@LocalStorageChanges
 	lateinit var localStorageChanges: MutableSharedFlow<LocalManga?>
 
-	// KEx -->
-	@Inject
-	lateinit var aniyomiExtensionManagerProvider: Provider<org.koitharu.kotatsu.aniyomi.AniyomiExtensionManagerKEx>
-	// KEx <--
-
 	private val widgetThemeWatcher by lazy { WidgetThemeWatcher(this) }
 
 	override val workManagerConfiguration: Configuration
@@ -117,9 +112,6 @@ open class BaseApp : Application(), Configuration.Provider {
 			ACRA.errorReporter.putCustomData("isMiui", RomCompat.isMiui.getOrNull().toString())
 		}
 		processLifecycleScope.launch(Dispatchers.Default) {
-			// KEx -->
-			aniyomiExtensionManagerProvider.get().initialize()
-			// KEx <--
 			setupDatabaseObservers()
 			localStorageChanges.collect(localMangaIndexProvider.get())
 		}

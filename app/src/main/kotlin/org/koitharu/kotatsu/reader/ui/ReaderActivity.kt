@@ -59,7 +59,6 @@ import org.koitharu.kotatsu.bookmarks.domain.Bookmark
 import org.koitharu.kotatsu.bookmarks.domain.epubHighlight
 import org.koitharu.kotatsu.core.exceptions.resolve.DialogErrorObserver
 import org.koitharu.kotatsu.core.exceptions.resolve.SnackbarErrorObserver
-import org.koitharu.kotatsu.core.model.isAnimeSource
 import org.koitharu.kotatsu.core.model.isLocal
 import org.koitharu.kotatsu.core.nav.AppRouter
 import org.koitharu.kotatsu.core.nav.router
@@ -409,15 +408,7 @@ class ReaderActivity :
         if (mode == null) {
             return
         }
-        // KEx -->
-        val manga = viewModel.getMangaOrNull()
-        if (manga != null && manga.source.isAnimeSource) {
-            router.openPlayer(manga)
-            finish()
-            return
-        }
-        readerManager.isEpub = manga?.isEpub == true
-        // KEx <--
+        readerManager.isEpub = viewModel.getMangaOrNull()?.isEpub == true
         viewBinding.timerControl.setEpubReader(readerManager.isEpub)
         updateScrollTimerButton()
         if (readerManager.currentMode != mode) {

@@ -33,7 +33,6 @@ import org.koitharu.kotatsu.core.model.FavouriteCategory
 import org.koitharu.kotatsu.core.model.MangaSourceInfo
 import org.koitharu.kotatsu.core.model.MissingMangaSource
 import org.koitharu.kotatsu.core.model.getTitle
-import org.koitharu.kotatsu.core.model.isAnimeSource
 import org.koitharu.kotatsu.core.model.isBroken
 import org.koitharu.kotatsu.core.model.isLocal
 import org.koitharu.kotatsu.core.model.unwrap
@@ -191,12 +190,6 @@ class AppRouter private constructor(
     }
 
     fun openReader(manga: Manga, anchor: View? = null) {
-        // KEx -->
-        if (manga.source.isAnimeSource) {
-            openPlayer(manga)
-            return
-        }
-        // KEx <--
         openReader(
             ReaderIntent.Builder(contextOrNull() ?: return)
                 .manga(manga)
@@ -233,16 +226,6 @@ class AppRouter private constructor(
             Intent(contextOrNull() ?: return, MangaDexCoversActivityKEx::class.java)
                 .putExtra(KEY_MANGA, ParcelableManga(manga, withDescription = false)),
         )
-    }
-
-    fun openPlayer(manga: Manga, chapterId: Long? = null) {
-        val ctx = contextOrNull() ?: return
-        val intent = Intent(ctx, org.koitharu.kotatsu.player.ui.PlayerActivityKEx::class.java)
-            .putExtra(KEY_MANGA, ParcelableManga(manga))
-        if (chapterId != null) {
-            intent.putExtra(KEY_ID, chapterId)
-        }
-        startActivity(intent)
     }
     // KEx <--
 

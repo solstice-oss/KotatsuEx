@@ -9,18 +9,7 @@ import org.koitharu.kotatsu.list.ui.model.ListModel
 data class ExploreSources(
 	val manga: List<ListModel>,
 	val novel: List<ListModel>,
-	// KEx -->
-	val anime: List<ListModel> = emptyList(),
-	// KEx <--
 ) {
 
 	operator fun get(isNovel: Boolean): List<ListModel> = if (isNovel) novel else manga
-
-	// KEx -->
-	fun getForTab(tabIndex: Int): List<ListModel> = when (tabIndex) {
-		0 -> manga
-		1 -> novel
-		else -> anime
-	}
-	// KEx <--
 }

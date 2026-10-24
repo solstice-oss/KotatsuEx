@@ -53,17 +53,6 @@
 		<intent>
 			<action android:name="android.intent.action.TTS_SERVICE" />
 		</intent>
-		<!-- KEx -> !-->
-		<intent>
-			<action android:name="tachiyomi.extension" />
-		</intent>
-		<intent>
-			<action android:name="tachiyomi.novelextension" />
-		</intent>
-		<intent>
-			<action android:name="tachiyomi.animeextension" />
-		</intent>
-		<!-- KEx <- !-->
 	</queries>
 
 	<application
