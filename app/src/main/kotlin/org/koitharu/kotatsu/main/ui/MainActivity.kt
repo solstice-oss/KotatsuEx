@@ -11,9 +11,8 @@ import android.view.ViewGroup.MarginLayoutParams
 import android.widget.LinearLayout
 import androidx.activity.viewModels
 import androidx.appcompat.view.ActionMode
-import androidx.appcompat.widget.PopupMenu
+import org.koitharu.kotatsu.core.ui.menu.MenuPopup
 import androidx.core.graphics.Insets
-import androidx.core.view.GravityCompat
 import androidx.core.view.MenuProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -30,7 +29,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.withResumed
-import androidx.recyclerview.widget.ItemTouchHelper
 import com.google.android.material.appbar.AppBarLayout
 import com.google.android.material.appbar.AppBarLayout.LayoutParams.SCROLL_FLAG_ENTER_ALWAYS
 import com.google.android.material.appbar.AppBarLayout.LayoutParams.SCROLL_FLAG_NO_SCROLL
@@ -87,7 +85,6 @@ import org.koitharu.kotatsu.main.ui.welcome.OnboardingActivity
 import org.koitharu.kotatsu.massmigrate.MassMigrateMenuProviderKEx
 import org.koitharu.kotatsu.parsers.model.Manga
 import org.koitharu.kotatsu.remotelist.ui.MangaSearchMenuProvider
-import org.koitharu.kotatsu.search.ui.suggestion.SearchSuggestionItemCallback
 import org.koitharu.kotatsu.search.ui.suggestion.SearchSuggestionListenerImpl
 import org.koitharu.kotatsu.search.ui.suggestion.SearchSuggestionMenuProvider
 import org.koitharu.kotatsu.search.ui.suggestion.SearchSuggestionViewModel
@@ -97,7 +94,6 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class MainActivity : BaseActivity<ActivityMainBinding>(), AppBarOwner, BottomNavOwner, ListCheckpointOwner,
 	View.OnClickListener,
-	SearchSuggestionItemCallback.SuggestionItemListener,
 	MainNavigationDelegate.OnFragmentChangedListener,
 	View.OnLayoutChangeListener,
 	SearchView.TransitionListener {
@@ -295,7 +291,7 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), AppBarOwner, BottomNav
 		val providers = overflowMenuProviders
 			.filter { it.isActive }
 			.map { it.provider }
-		val popup = PopupMenu(anchor.context, anchor, GravityCompat.END)
+		val popup = MenuPopup(anchor)
 		val menu = popup.menu
 		providers.forEach { it.onCreateMenu(menu, popup.menuInflater) }
 		providers.forEach { it.onPrepareMenu(menu) }
@@ -383,10 +379,6 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), AppBarOwner, BottomNav
 			adjustSearchUI(isOpened)
 		}
 		isSearchFullyShown = (newState == SearchView.TransitionState.SHOWN)
-	}
-
-	override fun onRemoveQuery(query: String) {
-		searchSuggestionViewModel.deleteQuery(query)
 	}
 
 	override fun onSupportActionModeStarted(mode: ActionMode) {
@@ -591,8 +583,6 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), AppBarOwner, BottomNav
 			this,
 			SnackbarErrorObserver(viewBinding.recyclerViewSearch, null),
 		)
-		ItemTouchHelper(SearchSuggestionItemCallback(this))
-			.attachToRecyclerView(viewBinding.recyclerViewSearch)
 	}
 
 	private fun setNavbarPinned(isPinned: Boolean) {
