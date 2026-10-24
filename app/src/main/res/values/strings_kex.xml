@@ -56,4 +56,6 @@
 	<string name="action_retry">Retry</string>
 	<string name="cover_item_description">Volume %1$s cover</string>
 	<string name="cover_item_default_description">Cover %1$d</string>
+
+	<string name="label_video_player">Video player</string>
 </resources>

@@ -24,10 +24,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
-import org.koitharu.kotatsu.aniyomi.AniyomiAnimeRepositoryKEx
-import org.koitharu.kotatsu.aniyomi.model.AniyomiAnimeSourceKEx
 import org.koitharu.kotatsu.core.cache.MemoryContentCache
-import org.koitharu.kotatsu.core.model.isAnimeSource
 import org.koitharu.kotatsu.core.network.MangaHttpClient
 import org.koitharu.kotatsu.core.parser.MangaDataRepository
 import org.koitharu.kotatsu.history.data.HistoryRepository
@@ -93,12 +90,13 @@ class PlayerViewModelKEx @Inject constructor(
 	fun initPlayer(manga: Manga, initialChapterId: Long?) {
 		_manga.value = manga
 		viewModelScope.launch(Dispatchers.IO) {
-			val details = if (manga.source is AniyomiAnimeSourceKEx) {
+			/*val details = if (manga.source is AniyomiAnimeSourceKEx) {
 				val repo = AniyomiAnimeRepositoryKEx(manga.source as AniyomiAnimeSourceKEx, contentCache, context)
 				runCatching { repo.getDetails(manga) }.getOrDefault(manga)
 			} else {
 				manga
-			}
+			}*/
+			val details = manga // TODO temp
 			_manga.value = details
 			val chList = details.chapters.orEmpty()
 			_chapters.value = chList
@@ -128,12 +126,13 @@ class PlayerViewModelKEx @Inject constructor(
 		_currentChapter.value = chapter
 		viewModelScope.launch(Dispatchers.IO) {
 			val m = _manga.value ?: return@launch
-			val resolvedVideos = if (m.source is AniyomiAnimeSourceKEx) {
+			/*val resolvedVideos = if (m.source is AniyomiAnimeSourceKEx) {
 				val repo = AniyomiAnimeRepositoryKEx(m.source as AniyomiAnimeSourceKEx, contentCache, context)
 				repo.getVideoList(chapter)
 			} else {
 				listOf(Video(videoUrl = chapter.url, videoTitle = "Local Video"))
-			}
+			}*/
+			val resolvedVideos = listOf(Video(videoUrl = chapter.url, videoTitle = "Local Video")) // TODO temp
 
 			_videos.value = resolvedVideos
 			val firstVideo = resolvedVideos.firstOrNull()
