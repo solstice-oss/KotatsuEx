@@ -1,5 +1,6 @@
 package org.koitharu.kotatsu.player.ui
 
+import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -15,28 +16,29 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.AspectRatio
+import androidx.compose.material.icons.filled.Audiotrack
+import androidx.compose.material.icons.filled.FastForward
+import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -49,42 +51,73 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.media3.common.util.UnstableApi
 import eu.kanade.tachiyomi.animesource.model.Video
 import org.koitharu.kotatsu.parsers.model.MangaChapter
+import org.koitharu.kotatsu.player.utils.PlayerAudioTrackKEx
+import org.koitharu.kotatsu.player.utils.PlayerSubtitleTrackKEx
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, UnstableApi::class)
 @Composable
 fun PlayerControlsKEx(
-	isVisible: Boolean,
-	title: String,
-	subtitle: String,
-	isPlaying: Boolean,
-	currentPosition: Long,
-	duration: Long,
-	bufferedPosition: Long,
-	videos: List<Video>,
-	selectedVideo: Video?,
-	speed: Float,
-	chapters: List<MangaChapter>,
-	currentChapter: MangaChapter?,
-	hasPreviousChapter: Boolean,
-	hasNextChapter: Boolean,
-	topInset: Dp = 0.dp,
-	bottomInset: Dp = 0.dp,
-	onTogglePlayPause: () -> Unit,
-	onSeekTo: (Long) -> Unit,
-	onPreviousChapter: () -> Unit,
-	onNextChapter: () -> Unit,
-	onSelectVideo: (Video) -> Unit,
-	onSelectSpeed: (Float) -> Unit,
-	onSelectChapter: (MangaChapter) -> Unit,
-	onEpisodesClick: () -> Unit,
-	onEpisodesDismissed: () -> Unit,
-	onBack: () -> Unit,
-	modifier: Modifier = Modifier,
+    isVisible: Boolean,
+    title: String,
+    subtitle: String,
+    isPlaying: Boolean,
+    currentPosition: Long,
+    duration: Long,
+    bufferedPosition: Long,
+    videos: List<Video>,
+    selectedVideo: Video?,
+    audioTracks: List<PlayerAudioTrackKEx>,
+    selectedAudioTrack: PlayerAudioTrackKEx?,
+    subtitleTracks: List<PlayerSubtitleTrackKEx>,
+    selectedSubtitleTrack: PlayerSubtitleTrackKEx?,
+    speed: Float,
+    resizeMode: Int,
+    autoPlayNext: Boolean,
+    subtitleFontSize: Float,
+    subtitleTextColor: Int,
+    subtitleBgColor: Int,
+    subtitleBold: Boolean,
+    subtitleOffsetMs: Long,
+    chapters: List<MangaChapter>,
+    currentChapter: MangaChapter?,
+    hasPreviousChapter: Boolean,
+    hasNextChapter: Boolean,
+    topInset: Dp = 0.dp,
+    bottomInset: Dp = 0.dp,
+    onTogglePlayPause: () -> Unit,
+    onSeekTo: (Long) -> Unit,
+    onRewind10: () -> Unit,
+    onForward10: () -> Unit,
+    onPreviousChapter: () -> Unit,
+    onNextChapter: () -> Unit,
+    onSelectVideo: (Video) -> Unit,
+    onSelectAudioTrack: (PlayerAudioTrackKEx) -> Unit,
+    onSelectSubtitleTrack: (PlayerSubtitleTrackKEx) -> Unit,
+    onDisableSubtitles: () -> Unit,
+    onImportSubtitleFile: () -> Unit,
+    onSelectSpeed: (Float) -> Unit,
+    onSelectResizeMode: (Int) -> Unit,
+    onAutoPlayNextChange: (Boolean) -> Unit,
+    onSubtitleFontSizeChange: (Float) -> Unit,
+    onSubtitleTextColorChange: (Int) -> Unit,
+    onSubtitleBgColorChange: (Int) -> Unit,
+    onSubtitleBoldChange: (Boolean) -> Unit,
+    onSubtitleOffsetChange: (Long) -> Unit,
+    onSelectChapter: (MangaChapter) -> Unit,
+    onEpisodesClick: () -> Unit,
+    onEpisodesDismissed: () -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
 	var showQualitySheet by remember { mutableStateOf(false) }
+	var showAudioTracksSheet by remember { mutableStateOf(false) }
+	var showSubtitleTracksSheet by remember { mutableStateOf(false) }
+	var showSubtitleSettingsSheet by remember { mutableStateOf(false) }
 	var showSpeedSheet by remember { mutableStateOf(false) }
+	var showAspectSheet by remember { mutableStateOf(false) }
 	var showEpisodesSheet by remember { mutableStateOf(false) }
 
 	AnimatedVisibility(
@@ -106,7 +139,7 @@ fun PlayerControlsKEx(
 				modifier = Modifier
 					.fillMaxWidth()
 					.align(Alignment.TopCenter)
-					.padding(start = 16.dp, end = 16.dp, top = effectiveTopInset + 16.dp, bottom = 16.dp),
+					.padding(start = 16.dp, end = 16.dp, top = effectiveTopInset + 12.dp, bottom = 12.dp),
 				verticalAlignment = Alignment.CenterVertically,
 			) {
 				IconButton(onClick = onBack) {
@@ -132,6 +165,7 @@ fun PlayerControlsKEx(
 						)
 					}
 				}
+
 				if (chapters.isNotEmpty()) {
 					IconButton(
 						onClick = {
@@ -146,19 +180,45 @@ fun PlayerControlsKEx(
 						)
 					}
 				}
+
 				if (videos.isNotEmpty()) {
 					IconButton(onClick = { showQualitySheet = true }) {
 						Icon(
 							imageVector = Icons.Default.Settings,
-							contentDescription = "Quality",
+							contentDescription = "Quality / Server",
 							tint = Color.White,
 						)
 					}
 				}
+
+				IconButton(onClick = { showAudioTracksSheet = true }) {
+					Icon(
+						imageVector = Icons.Default.Audiotrack,
+						contentDescription = "Audio Tracks",
+						tint = Color.White,
+					)
+				}
+
+				IconButton(onClick = { showSubtitleTracksSheet = true }) {
+					Icon(
+						imageVector = Icons.Default.Subtitles,
+						contentDescription = "Subtitles",
+						tint = if (selectedSubtitleTrack != null) MaterialTheme.colorScheme.primary else Color.White,
+					)
+				}
+
 				IconButton(onClick = { showSpeedSheet = true }) {
 					Icon(
 						imageVector = Icons.Default.Speed,
-						contentDescription = "Speed",
+						contentDescription = "Playback Speed",
+						tint = Color.White,
+					)
+				}
+
+				IconButton(onClick = { showAspectSheet = true }) {
+					Icon(
+						imageVector = Icons.Default.AspectRatio,
+						contentDescription = "Aspect Ratio",
 						tint = Color.White,
 					)
 				}
@@ -167,19 +227,31 @@ fun PlayerControlsKEx(
 			// Center Controls
 			Row(
 				modifier = Modifier.align(Alignment.Center),
-				horizontalArrangement = Arrangement.spacedBy(24.dp),
+				horizontalArrangement = Arrangement.spacedBy(16.dp),
 				verticalAlignment = Alignment.CenterVertically,
 			) {
 				IconButton(
 					onClick = onPreviousChapter,
 					enabled = hasPreviousChapter,
-					modifier = Modifier.size(56.dp),
+					modifier = Modifier.size(48.dp),
 				) {
 					Icon(
 						imageVector = Icons.Default.SkipPrevious,
 						contentDescription = "Previous Episode",
 						tint = if (hasPreviousChapter) Color.White else Color.White.copy(alpha = 0.38f),
-						modifier = Modifier.size(36.dp),
+						modifier = Modifier.size(32.dp),
+					)
+				}
+
+				IconButton(
+					onClick = onRewind10,
+					modifier = Modifier.size(48.dp),
+				) {
+					Icon(
+						imageVector = Icons.Default.FastRewind,
+						contentDescription = "-10s",
+						tint = Color.White,
+						modifier = Modifier.size(32.dp),
 					)
 				}
 
@@ -200,15 +272,27 @@ fun PlayerControlsKEx(
 				}
 
 				IconButton(
+					onClick = onForward10,
+					modifier = Modifier.size(48.dp),
+				) {
+					Icon(
+						imageVector = Icons.Default.FastForward,
+						contentDescription = "+10s",
+						tint = Color.White,
+						modifier = Modifier.size(32.dp),
+					)
+				}
+
+				IconButton(
 					onClick = onNextChapter,
 					enabled = hasNextChapter,
-					modifier = Modifier.size(56.dp),
+					modifier = Modifier.size(48.dp),
 				) {
 					Icon(
 						imageVector = Icons.Default.SkipNext,
 						contentDescription = "Next Episode",
 						tint = if (hasNextChapter) Color.White else Color.White.copy(alpha = 0.38f),
-						modifier = Modifier.size(36.dp),
+						modifier = Modifier.size(32.dp),
 					)
 				}
 			}
@@ -218,7 +302,7 @@ fun PlayerControlsKEx(
 				modifier = Modifier
 					.fillMaxWidth()
 					.align(Alignment.BottomCenter)
-					.padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = effectiveBottomInset + 16.dp),
+					.padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = effectiveBottomInset + 12.dp),
 			) {
 				Row(
 					modifier = Modifier.fillMaxWidth(),
@@ -251,139 +335,86 @@ fun PlayerControlsKEx(
 			}
 		}
 
+		// Quality Bottom Sheet
+		if (showQualitySheet) {
+			QualitySheetKEx(
+				videos = videos,
+				selectedVideo = selectedVideo,
+				onSelectVideo = onSelectVideo,
+				onDismiss = { showQualitySheet = false },
+			)
+		}
+
+		// Audio Tracks Bottom Sheet
+		if (showAudioTracksSheet) {
+			AudioTracksSheetKEx(
+				audioTracks = audioTracks,
+				onSelectAudioTrack = onSelectAudioTrack,
+				onDismiss = { showAudioTracksSheet = false },
+			)
+		}
+
+		// Subtitle Tracks Bottom Sheet
+		if (showSubtitleTracksSheet) {
+			SubtitleTracksSheetKEx(
+				subtitleTracks = subtitleTracks,
+				onSelectSubtitleTrack = onSelectSubtitleTrack,
+				onDisableSubtitles = onDisableSubtitles,
+				onImportSubtitleFile = onImportSubtitleFile,
+				onOpenSubtitleSettings = {
+					showSubtitleTracksSheet = false
+					showSubtitleSettingsSheet = true
+				},
+				onDismiss = { showSubtitleTracksSheet = false },
+			)
+		}
+
+		// Subtitle Settings Bottom Sheet
+		if (showSubtitleSettingsSheet) {
+			SubtitleSettingsSheetKEx(
+				fontSizeSp = subtitleFontSize,
+				textColor = subtitleTextColor,
+				bgColor = subtitleBgColor,
+				isBold = subtitleBold,
+				subtitleOffsetMs = subtitleOffsetMs,
+				onFontSizeChange = onSubtitleFontSizeChange,
+				onTextColorChange = onSubtitleTextColorChange,
+				onBgColorChange = onSubtitleBgColorChange,
+				onBoldChange = onSubtitleBoldChange,
+				onOffsetChange = onSubtitleOffsetChange,
+				onDismiss = { showSubtitleSettingsSheet = false },
+			)
+		}
+
+		// Playback Speed Bottom Sheet
+		if (showSpeedSheet) {
+			PlaybackSpeedSheetKEx(
+				currentSpeed = speed,
+				onSelectSpeed = onSelectSpeed,
+				onDismiss = { showSpeedSheet = false },
+			)
+		}
+
+		// Aspect Ratio / Fit Bottom Sheet
+		if (showAspectSheet) {
+			VideoAspectSheetKEx(
+				currentResizeMode = resizeMode,
+				onSelectResizeMode = onSelectResizeMode,
+				onDismiss = { showAspectSheet = false },
+			)
+		}
+
 		// Episodes Bottom Sheet
 		if (showEpisodesSheet) {
-			ModalBottomSheet(
-				onDismissRequest = {
+			EpisodesSheetKEx(
+				chapters = chapters,
+				currentChapter = currentChapter,
+				onSelectChapter = onSelectChapter,
+				onDismiss = {
 					showEpisodesSheet = false
 					onEpisodesDismissed()
 				},
-				containerColor = MaterialTheme.colorScheme.surfaceContainer,
-				contentColor = MaterialTheme.colorScheme.onSurface,
-			) {
-				Column(modifier = Modifier.padding(16.dp)) {
-					Text(
-						text = "Episodes",
-						style = MaterialTheme.typography.titleMedium,
-						fontWeight = FontWeight.Bold,
-						color = MaterialTheme.colorScheme.onSurface,
-						modifier = Modifier.padding(bottom = 12.dp),
-					)
-					LazyColumn {
-						items(chapters) { chapter ->
-							val isSelected = chapter.id == currentChapter?.id
-							Surface(
-								onClick = {
-									onSelectChapter(chapter)
-									showEpisodesSheet = false
-									onEpisodesDismissed()
-								},
-								shape = RoundedCornerShape(12.dp),
-								color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-								contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-								modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-							) {
-								Row(
-									modifier = Modifier
-										.fillMaxWidth()
-										.padding(16.dp),
-									verticalAlignment = Alignment.CenterVertically,
-								) {
-									Text(
-										text = chapter.title.orEmpty().ifBlank {
-											chapter.numberString()?.let { "Episode $it" } ?: "Chapter ${chapter.number}"
-										},
-										style = MaterialTheme.typography.bodyMedium,
-										fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-										color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-										modifier = Modifier.weight(1f),
-									)
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-
-		// Quality Bottom Sheet
-		if (showQualitySheet) {
-			ModalBottomSheet(
-				onDismissRequest = { showQualitySheet = false },
-				containerColor = MaterialTheme.colorScheme.surfaceContainer,
-				contentColor = MaterialTheme.colorScheme.onSurface,
-			) {
-				Column(modifier = Modifier.padding(16.dp)) {
-					Text(
-						text = "Video Quality / Server",
-						style = MaterialTheme.typography.titleMedium,
-						fontWeight = FontWeight.Bold,
-						color = MaterialTheme.colorScheme.onSurface,
-						modifier = Modifier.padding(bottom = 12.dp),
-					)
-					LazyColumn {
-						items(videos) { video ->
-							val isSelected = video == selectedVideo
-							Surface(
-								onClick = {
-									onSelectVideo(video)
-									showQualitySheet = false
-								},
-								shape = RoundedCornerShape(12.dp),
-								color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-								contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-								modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-							) {
-								Text(
-									text = video.videoTitle.ifBlank { video.quality.ifBlank { "Stream" } },
-									style = MaterialTheme.typography.bodyMedium,
-									color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-									modifier = Modifier.padding(16.dp),
-								)
-							}
-						}
-					}
-				}
-			}
-		}
-
-		// Speed Bottom Sheet
-		if (showSpeedSheet) {
-			ModalBottomSheet(
-				onDismissRequest = { showSpeedSheet = false },
-				containerColor = MaterialTheme.colorScheme.surfaceContainer,
-				contentColor = MaterialTheme.colorScheme.onSurface,
-			) {
-				Column(modifier = Modifier.padding(16.dp)) {
-					Text(
-						text = "Playback Speed",
-						style = MaterialTheme.typography.titleMedium,
-						fontWeight = FontWeight.Bold,
-						color = MaterialTheme.colorScheme.onSurface,
-						modifier = Modifier.padding(bottom = 12.dp),
-					)
-					listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f).forEach { s ->
-						val isSelected = speed == s
-						Surface(
-							onClick = {
-								onSelectSpeed(s)
-								showSpeedSheet = false
-							},
-							shape = RoundedCornerShape(12.dp),
-							color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-							contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-							modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-						) {
-							Text(
-								text = "${s}x",
-								style = MaterialTheme.typography.bodyMedium,
-								color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-								modifier = Modifier.padding(16.dp),
-							)
-						}
-					}
-				}
-			}
+			)
 		}
 	}
 }
