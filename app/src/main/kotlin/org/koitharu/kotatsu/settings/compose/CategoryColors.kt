@@ -30,7 +30,10 @@ object CategoryPalette {
 	val Tracker = CategoryIconColors(Color(0xFFFFDAD6), Color(0xFF410002))
 	val Services = CategoryIconColors(Color(0xFFE0E0FF), Color(0xFF0F1761))
 	val About = CategoryIconColors(Color(0xFFDDE2EB), Color(0xFF1B1B1F))
-	val Sync = CategoryIconColors(Color(0xFF5F6368), Color(0xFFFFFFFF))
+	val Sync = CategoryIconColors(Color(0xFFE0E0E0), Color(0xFF1E1E1E))
+	// KEx -->
+	val Player = CategoryIconColors(Color(0xFFFDCF77), Color(0xFF423207)) // <- KEx
+	// KEx <--
 
 	// Dark-mode variants — deeper tinted container, lighter foreground.
 	private val AppearanceDark = CategoryIconColors(Color(0xFF4F378B), Color(0xFFE9DDFF))
@@ -43,6 +46,9 @@ object CategoryPalette {
 	private val ServicesDark = CategoryIconColors(Color(0xFF333DB1), Color(0xFFE0E0FF))
 	private val AboutDark = CategoryIconColors(Color(0xFF45464F), Color(0xFFDDE2EB))
 	private val SyncDark = CategoryIconColors(Color(0xFF5F6368), Color(0xFFFFFFFF))
+	// KEx -->
+	private val PlayerDark = CategoryIconColors(Color(0xFF9B7832), Color(0xFFFFE4B3))
+	// KEx <--
 
 	@Composable
 	fun forKey(key: String): CategoryIconColors {
@@ -60,6 +66,9 @@ object CategoryPalette {
 			"services" -> if (dark) ServicesDark else Services
 			"about" -> if (dark) AboutDark else About
 			"sync" -> if (dark) SyncDark else Sync
+			// KEx -->
+			"player" -> if (dark) PlayerDark else Player
+			// KEx <--
 			else -> if (dark) AboutDark else About
 		}
 	}

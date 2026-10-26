@@ -58,4 +58,52 @@
 	<string name="cover_item_default_description">Cover %1$d</string>
 
 	<string name="label_video_player">Video player</string>
+	<string name="player_settings">Player</string>
+	<string name="playback_automation">Playback</string>
+	<string name="video_controls">Controls</string>
+	<string name="audio_subtitles">Audio &amp; Subtitles</string>
+
+	<!-- Player Settings -->
+	<string name="pref_default_playback_speed">Default Playback Speed</string>
+	<string name="pref_auto_play_next_episode">Auto-play Next Episode</string>
+	<string name="pref_auto_play_next_episode_summary">Automatically start playing the next episode when current episode ends</string>
+	<string name="pref_remember_playback_position">Remember Playback Position</string>
+	<string name="pref_remember_playback_position_summary">Automatically resume video from where you left off</string>
+	<string name="pref_remember_brightness_volume">Remember Brightness &amp; Volume</string>
+	<string name="pref_remember_brightness_volume_summary">Keep screen brightness and volume across video playback sessions</string>
+	<string name="pref_video_aspect_ratio">Video Aspect Ratio / Fit</string>
+	<string name="pref_double_tap_seek_duration">Double-Tap Seek Duration</string>
+	<string name="pref_enable_swipe_gestures">Enable Screen Swipe Gestures</string>
+	<string name="pref_enable_swipe_gestures_summary">Swipe vertically on left side for brightness, right side for volume</string>
+	<string name="pref_preferred_audio_language">Preferred Audio Language</string>
+	<string name="pref_preferred_subtitle_language">Preferred Subtitle Language</string>
+	<string name="pref_subtitle_font_size">Subtitle Font Size</string>
+	<string name="pref_bold_subtitles">Bold Subtitles</string>
+	<string name="pref_bold_subtitles_summary">Render subtitle text in bold weight</string>
+	<string name="unit_sp">sp</string>
+
+	<string-array name="aspect_ratio_entries">
+		<item>Fit to Screen</item>
+		<item>Crop / Zoom</item>
+		<item>Stretch / Fill</item>
+		<item>Fit Width</item>
+		<item>Fit Height</item>
+	</string-array>
+
+	<string-array name="double_tap_seek_entries">
+		<item>5 seconds</item>
+		<item>10 seconds</item>
+		<item>15 seconds</item>
+		<item>20 seconds</item>
+		<item>30 seconds</item>
+	</string-array>
+
+	<string-array name="preferred_lang_entries">
+		<item>Auto / Source Default</item>
+		<item>Japanese</item>
+		<item>English</item>
+		<item>Spanish</item>
+		<item>French</item>
+		<item>German</item>
+	</string-array>
 </resources>

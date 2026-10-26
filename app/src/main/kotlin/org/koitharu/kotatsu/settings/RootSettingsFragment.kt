@@ -140,6 +140,13 @@ private enum class SettingsSection(
 		intArrayOf(R.string.read_mode, R.string.scale_mode, R.string.switch_pages),
 		ReaderSettingsFragment::class.java,
 	),
+	// KEx -->
+	PLAYER(
+		R.string.player_settings, R.drawable.ic_play_circle, "player",
+		intArrayOf(R.string.playback_automation, R.string.video_controls, R.string.audio_subtitles),
+		PlayerSettingsFragmentKEx::class.java,
+	),
+	// KEx <--
 	STORAGE(
 		R.string.storage_and_network, R.drawable.ic_usage, "storage",
 		intArrayOf(R.string.storage_usage, R.string.proxy, R.string.prefetch_content),
