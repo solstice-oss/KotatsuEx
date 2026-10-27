@@ -6,12 +6,16 @@ import androidx.annotation.OptIn
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.mediacodec.MediaCodecInfo
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -177,7 +181,28 @@ class PlayerViewModelKEx @Inject constructor(
 	}
 
 	fun getOrCreatePlayer(): ExoPlayer {
-		return player ?: ExoPlayer.Builder(context).build().also { p ->
+		val renderersFactory = DefaultRenderersFactory(context)
+			.setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+			.setMediaCodecSelector(object : MediaCodecSelector {
+				override fun getDecoderInfos(
+					mimeType: String,
+					requiresSecureDecoder: Boolean,
+					requiresTunnelingDecoder: Boolean,
+				): List<MediaCodecInfo> {
+					return if (mimeType == MimeTypes.AUDIO_AAC) {
+						// Android may advertise AAC Main support but fail when decoding the stream.
+						emptyList()
+					} else {
+						MediaCodecSelector.DEFAULT.getDecoderInfos(
+							mimeType,
+							requiresSecureDecoder,
+							requiresTunnelingDecoder,
+						)
+					}
+				}
+			})
+
+		return player ?: ExoPlayer.Builder(context, renderersFactory).build().also { p ->
 			player = p
 			p.playbackParameters = PlaybackParameters(_speed.value)
 			p.addListener(object : Player.Listener {

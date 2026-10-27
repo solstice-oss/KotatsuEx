@@ -60,6 +60,7 @@ graphicsShapes = "1.1.0"
 # KEX -->
 mpandroidchart = "v3.1.0"
 media3 = "1.5.1"
+media3Ffmpeg = "1.5.0+1"
 nanohttpd = "2.3.1"
 
 [libraries]
@@ -150,6 +151,7 @@ media3-exoplayer-hls = { module = "androidx.media3:media3-exoplayer-hls", versio
 media3-exoplayer-dash = { module = "androidx.media3:media3-exoplayer-dash", version.ref = "media3" }
 media3-ui = { module = "androidx.media3:media3-ui", version.ref = "media3" }
 media3-datasource-okhttp = { module = "androidx.media3:media3-datasource-okhttp", version.ref = "media3" }
+media3-ffmpeg-decoder = { module = "org.jellyfin.media3:media3-ffmpeg-decoder", version.ref = "media3Ffmpeg" }
 nanohttpd = { module = "org.nanohttpd:nanohttpd", version.ref = "nanohttpd" }
 
 [plugins]
